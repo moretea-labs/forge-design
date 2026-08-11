@@ -1,0 +1,18 @@
+name: Feature request
+description: Propose a design-model or workspace capability
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+    validations:
+      required: true
+  - type: textarea
+    id: model
+    attributes:
+      label: Canonical model impact
+      description: Explain any token, component, screen, design.md, CLI, API, or provider changes.
+    validations:
+      required: true
