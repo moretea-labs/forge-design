@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.moretea-labs.dev/design/tokens.schema.json",
+  "title": "Forge Design tokens",
+  "type": "object",
+  "required": ["schemaVersion", "meta", "color", "spacing", "radius", "shadow", "typography", "device"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "meta": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "color": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "string", "minLength": 1 } },
+    "spacing": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "number", "minimum": 0 } },
+    "radius": { "type": "object", "minProperties": 1, "additionalProperties": { "type": "number", "minimum": 0 } },
+    "shadow": { "type": "object", "additionalProperties": { "type": "string" } },
+    "typography": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["size", "lineHeight", "weight"],
+        "properties": {
+          "size": { "type": "number", "minimum": 1 },
+          "lineHeight": { "type": "number", "minimum": 1 },
+          "weight": { "type": "number", "minimum": 1 }
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "required": ["iphoneWidth", "iphoneHeight", "safeTop", "safeBottom"],
+      "properties": {
+        "iphoneWidth": { "type": "number", "minimum": 1 },
+        "iphoneHeight": { "type": "number", "minimum": 1 },
+        "safeTop": { "type": "number", "minimum": 0 },
+        "safeBottom": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

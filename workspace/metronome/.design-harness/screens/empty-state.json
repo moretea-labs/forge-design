@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "empty-state",
+  "name": "空白画板",
+  "device": "iphone-16-pro",
+  "goal": "用于验证设计规则和新页面结构。",
+  "primaryAction": "create-screen",
+  "constraints": ["只允许使用组件注册表中的组件"],
+  "nodes": [
+    { "id": "header", "component": "ScreenHeader", "props": { "eyebrow": "New screen", "title": "空白设计稿" } },
+    { "id": "empty", "component": "EmptyState", "props": { "title": "从 Screen Spec 开始", "body": "先定义页面目标、主操作和约束，再组合注册组件。" } },
+    { "id": "start", "component": "PrimaryAction", "props": { "label": "创建页面", "activeLabel": "创建页面" } }
+  ]
+}

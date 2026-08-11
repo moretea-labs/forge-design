@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "name": "ScreenHeader",
+      "purpose": "Page identity and one optional secondary action.",
+      "allowedProps": [
+        "eyebrow",
+        "title",
+        "actionLabel"
+      ],
+      "category": "navigation"
+    },
+    {
+      "name": "BPMController",
+      "purpose": "Primary tempo control with bounded adjustments.",
+      "allowedProps": [
+        "initialBpm",
+        "min",
+        "max"
+      ],
+      "category": "control"
+    },
+    {
+      "name": "BeatTrajectory",
+      "purpose": "Compact single-beat timing visualization.",
+      "allowedProps": [
+        "beats",
+        "compact"
+      ],
+      "category": "content"
+    },
+    {
+      "name": "PracticeSummary",
+      "purpose": "Secondary practice context without competing with the main action.",
+      "allowedProps": [
+        "duration",
+        "streak"
+      ],
+      "category": "content"
+    },
+    {
+      "name": "EmptyState",
+      "purpose": "Explain an empty canvas and the next valid action.",
+      "allowedProps": [
+        "title",
+        "body"
+      ],
+      "category": "content"
+    },
+    {
+      "name": "PrimaryAction",
+      "purpose": "Exactly one dominant screen action.",
+      "allowedProps": [
+        "label",
+        "activeLabel"
+      ],
+      "category": "control"
+    }
+  ]
+}

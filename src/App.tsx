@@ -1,0 +1,363 @@
+import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import {
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  CircleAlert,
+  Clipboard,
+  Component,
+  FileCode2,
+  Focus,
+  GitBranch,
+  Grid2X2,
+  Layers3,
+  LoaderCircle,
+  Plus,
+  RefreshCw,
+  Save,
+  Smartphone,
+  SwatchBook,
+} from 'lucide-react';
+import { designApi } from './client/design-api';
+import { lintScreen } from './core/lint';
+import type {
+  ComponentContract,
+  ComponentContractsDocument,
+  DesignProjectContext,
+  DesignProjectPaths,
+  DesignProjectSummary,
+  DesignTokens,
+  ScreenSpec,
+} from './core/schema';
+import { installTokenVariables } from './design-system/tokens';
+import { MockScreen } from './components/MockScreen';
+
+type WorkspaceView = 'screens' | 'components' | 'tokens';
+type InspectorTab = 'inspect' | 'spec' | 'flow';
+type Notice = { kind: 'success' | 'error'; message: string } | null;
+
+const json = (value: unknown) => JSON.stringify(value, null, 2);
+
+function parseDocument<T>(source: string): T {
+  return JSON.parse(source) as T;
+}
+
+function newScreen(): ScreenSpec {
+  const id = `screen-${Date.now().toString(36)}`;
+  return {
+    schemaVersion: 1,
+    id,
+    name: '新画板',
+    device: 'iphone-16-pro',
+    goal: '先定义这个页面要帮助用户完成什么。',
+    primaryAction: 'continue',
+    constraints: ['只使用当前项目注册的组件和 Token。'],
+    nodes: [
+      { id: 'header', component: 'ScreenHeader', props: { eyebrow: 'New screen', title: '新画板' } },
+      { id: 'empty', component: 'EmptyState', props: { title: '从页面目标开始', body: '在 Spec 中完善目标、约束和组件结构。' } },
+      { id: 'continue', component: 'PrimaryAction', props: { label: '继续', activeLabel: '继续' } },
+    ],
+  };
+}
+
+function AssetEditor({ value, onChange, onSave, onReload, busy }: {
+  value: string;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onReload: () => void;
+  busy: boolean;
+}): ReactElement {
+  return (
+    <div className="asset-editor">
+      <textarea aria-label="JSON editor" spellCheck={false} value={value} onChange={(event) => onChange(event.target.value)} />
+      <div className="editor-actions">
+        <button onClick={onReload} disabled={busy}><RefreshCw size={14} />重新读取</button>
+        <button className="save-button" onClick={onSave} disabled={busy}>{busy ? <LoaderCircle className="spin" size={14} /> : <Save size={14} />}保存到仓库</button>
+      </div>
+    </div>
+  );
+}
+
+export default function App(): ReactElement {
+  const [projects, setProjects] = useState<DesignProjectSummary[]>([]);
+  const [projectId, setProjectId] = useState('');
+  const [context, setContext] = useState<DesignProjectContext | null>(null);
+  const [paths, setPaths] = useState<DesignProjectPaths | null>(null);
+  const [selectedId, setSelectedId] = useState('');
+  const [selectedComponentName, setSelectedComponentName] = useState('');
+  const [view, setView] = useState<WorkspaceView>('screens');
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect');
+  const [editorText, setEditorText] = useState('');
+  const [zoom, setZoom] = useState(0.78);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
+
+  const selected = context?.screens.find((screen) => screen.id === selectedId) ?? context?.screens[0] ?? null;
+  const contracts = context?.components.components ?? [];
+  const selectedComponent = contracts.find((component) => component.name === selectedComponentName) ?? contracts[0] ?? null;
+  const issues = useMemo(() => selected && context ? lintScreen(selected, context.components) : [], [selected, context]);
+
+  const loadProject = useCallback(async (nextProjectId: string, preferredScreenId?: string) => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const [nextContext, nextPaths] = await Promise.all([
+        designApi.getContext(nextProjectId),
+        designApi.getPaths(nextProjectId),
+      ]);
+      setContext(nextContext);
+      setPaths(nextPaths);
+      setProjectId(nextProjectId);
+      installTokenVariables(nextContext.tokens);
+      const nextScreenId = preferredScreenId && nextContext.screens.some((screen) => screen.id === preferredScreenId)
+        ? preferredScreenId
+        : nextContext.project.activeScreenId;
+      setSelectedId(nextScreenId);
+      setSelectedComponentName((current) => nextContext.components.components.some((component) => component.name === current)
+        ? current
+        : nextContext.components.components[0]?.name ?? '');
+    } catch (error) {
+      setNotice({ kind: 'error', message: error instanceof Error ? error.message : '无法读取设计项目。' });
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const loadProjects = useCallback(async () => {
+    setBusy(true);
+    try {
+      const nextProjects = await designApi.listProjects();
+      setProjects(nextProjects);
+      const nextProjectId = nextProjects.some((project) => project.id === projectId) ? projectId : nextProjects[0]?.id;
+      if (nextProjectId) await loadProject(nextProjectId, selectedId);
+    } catch (error) {
+      setNotice({ kind: 'error', message: error instanceof Error ? error.message : '无法发现设计项目。' });
+      setBusy(false);
+    }
+  }, [loadProject, projectId, selectedId]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const nextProjects = await designApi.listProjects();
+        setProjects(nextProjects);
+        if (nextProjects[0]) await loadProject(nextProjects[0].id);
+      } catch (error) {
+        setNotice({ kind: 'error', message: error instanceof Error ? error.message : '无法启动 Design Harness。' });
+      }
+    })();
+  }, [loadProject]);
+
+  useEffect(() => {
+    if (!context) return;
+    if (view === 'tokens') setEditorText(json(context.tokens));
+    else if (view === 'components') setEditorText(json(context.components));
+    else if (inspectorTab === 'spec' && selected) setEditorText(json(selected));
+  }, [context, view, inspectorTab, selected]);
+
+  const saveEditor = async () => {
+    if (!context) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      if (view === 'tokens') {
+        const document = parseDocument<DesignTokens>(editorText);
+        await designApi.putTokens(projectId, document);
+        installTokenVariables(document);
+      } else if (view === 'components') {
+        await designApi.putComponents(projectId, parseDocument<ComponentContractsDocument>(editorText));
+      } else if (selected) {
+        const document = parseDocument<ScreenSpec>(editorText);
+        if (document.id !== selected.id) throw new Error('编辑已有画板时不能修改 screen id；请新建独立画板。');
+        await designApi.putScreen(projectId, document);
+      }
+      await loadProject(projectId, selected?.id);
+      setNotice({ kind: 'success', message: '已原子写入目标仓库的 .design-harness。' });
+    } catch (error) {
+      setNotice({ kind: 'error', message: error instanceof Error ? error.message : '保存失败。' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createScreen = async () => {
+    if (!context) return;
+    setBusy(true);
+    const screen = newScreen();
+    try {
+      await designApi.createScreen(projectId, screen);
+      setView('screens');
+      setInspectorTab('spec');
+      await loadProject(projectId, screen.id);
+      setNotice({ kind: 'success', message: `已创建 screens/${screen.id}.json。` });
+    } catch (error) {
+      setNotice({ kind: 'error', message: error instanceof Error ? error.message : '创建画板失败。' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyContext = async () => {
+    if (!context) return;
+    try {
+      await navigator.clipboard.writeText(json(context));
+      setNotice({ kind: 'success', message: '完整 ChatGPT 设计上下文已复制。' });
+    } catch {
+      setNotice({ kind: 'error', message: '浏览器拒绝剪贴板访问，请在 Context API 中读取。' });
+    }
+  };
+
+  const switchView = (nextView: WorkspaceView) => {
+    setView(nextView);
+    if (nextView === 'screens') setInspectorTab('inspect');
+  };
+
+  if (!context) {
+    return <div className="loading-shell"><LoaderCircle className="spin" /><strong>正在读取仓库设计资产</strong>{notice && <span>{notice.message}</span>}</div>;
+  }
+
+  const renderScreensSidebar = () => (
+    <>
+      <div className="sidebar-section-title"><span>项目画板</span><button aria-label="新建画板" onClick={() => void createScreen()} disabled={busy}><Plus size={17} /></button></div>
+      <div className="screen-list">
+        {context.screens.map((screen) => (
+          <button key={screen.id} className={screen.id === selected?.id ? 'selected' : ''} onClick={() => setSelectedId(screen.id)}>
+            <span className="mini-device"><span /></span><span><strong>{screen.name}</strong><small>{screen.id}</small></span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+
+  const renderComponentsSidebar = () => (
+    <>
+      <div className="sidebar-section-title"><span>组件契约</span><span>{contracts.length}</span></div>
+      <div className="screen-list contract-list">
+        {contracts.map((contract) => (
+          <button key={contract.name} className={contract.name === selectedComponent?.name ? 'selected' : ''} onClick={() => setSelectedComponentName(contract.name)}>
+            <Component size={18} /><span><strong>{contract.name}</strong><small>{contract.category}</small></span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+
+  const renderTokensSidebar = () => (
+    <>
+      <div className="sidebar-section-title"><span>Token 分组</span><span>{Object.keys(context.tokens).length - 2}</span></div>
+      <div className="token-group-list">
+        {Object.entries(context.tokens).filter(([name]) => !['schemaVersion', 'meta'].includes(name)).map(([name, value]) => (
+          <div key={name}><SwatchBook size={15} /><strong>{name}</strong><span>{Object.keys(value as object).length}</span></div>
+        ))}
+      </div>
+    </>
+  );
+
+  const renderAssetWorkspace = () => {
+    const isTokens = view === 'tokens';
+    const title = isTokens ? 'Design Tokens' : 'Component Contracts';
+    const description = isTokens
+      ? '保存后立即重新安装 CSS Variables，并同步写入目标仓库。'
+      : 'ChatGPT 只能组合这里声明的组件和 Props。';
+    return (
+      <div className="asset-workspace">
+        <div className="asset-workspace-header"><div><span>{context.project.name}</span><h1>{title}</h1><p>{description}</p></div><div className="asset-badge">Canonical · .design-harness</div></div>
+        {view === 'components' && selectedComponent && (
+          <div className="selected-contract-card">
+            <div><Component size={20} /><strong>{selectedComponent.name}</strong><span>{selectedComponent.category}</span></div>
+            <p>{selectedComponent.purpose}</p>
+            <div>{selectedComponent.allowedProps.map((prop) => <code key={prop}>{prop}</code>)}</div>
+          </div>
+        )}
+        {isTokens && (
+          <div className="full-token-preview">
+            {Object.entries(context.tokens.color).map(([name, value]) => <div key={name}><span style={{ background: value }} /><strong>{name}</strong><small>{value}</small></div>)}
+          </div>
+        )}
+        <AssetEditor value={editorText} onChange={setEditorText} onSave={() => void saveEditor()} onReload={() => void loadProject(projectId, selected?.id)} busy={busy} />
+      </div>
+    );
+  };
+
+  const renderInspector = () => {
+    if (!selected) return null;
+    if (inspectorTab === 'spec') {
+      return <section className="inspector-section inspector-editor"><div className="inspector-title"><FileCode2 size={16} /><strong>Screen Spec</strong><span>JSON</span></div><AssetEditor value={editorText} onChange={setEditorText} onSave={() => void saveEditor()} onReload={() => setEditorText(json(selected))} busy={busy} /></section>;
+    }
+    if (inspectorTab === 'flow') {
+      return (
+        <section className="inspector-section flow-panel">
+          <div className="inspector-title"><GitBranch size={16} /><strong>交互流</strong><span>{selected.nodes.length}</span></div>
+          <div className="flow-start">进入 · {selected.name}</div>
+          {selected.nodes.map((node) => <div className="flow-node" key={node.id}><span>{node.component}</span><small>{node.id}</small></div>)}
+          <div className="flow-primary">Primary → {selected.primaryAction}</div>
+        </section>
+      );
+    }
+    return (
+      <>
+        <section className="inspector-section"><div className="inspector-title"><Focus size={16} /><strong>页面意图</strong></div><p>{selected.goal}</p><div className="primary-tag">Primary · {selected.primaryAction}</div></section>
+        <section className="inspector-section"><div className="inspector-title"><FileCode2 size={16} /><strong>约束</strong><span>{selected.constraints.length}</span></div><ul>{selected.constraints.map((item) => <li key={item}>{item}</li>)}</ul></section>
+        <section className="inspector-section"><div className="inspector-title"><Component size={16} /><strong>组件树</strong><span>{selected.nodes.length}</span></div><div className="component-tree">{selected.nodes.map((node) => <div key={node.id}><span className="tree-line" /><span>{node.component}</span><small>{contracts.find((item) => item.name === node.component)?.category ?? 'missing'}</small></div>)}</div></section>
+        <section className="inspector-section"><div className="inspector-title"><CheckCircle2 size={16} /><strong>Design lint</strong><span>{issues.length}</span></div>{issues.length === 0 ? <div className="lint-success"><CheckCircle2 size={17} />通过全部规则</div> : <div className="lint-list">{issues.map((issue) => <div key={`${issue.rule}-${issue.nodeId ?? ''}`}><CircleAlert size={16} /><span><strong>{issue.rule}</strong>{issue.message}</span></div>)}</div>}</section>
+        <section className="inspector-section token-preview"><div className="inspector-title"><SwatchBook size={16} /><strong>活跃 Token</strong></div><div className="token-swatches">{(['screenBackground', 'surface', 'textPrimary', 'textSecondary', 'accent', 'accentSoft'] as const).map((name) => <div key={name}><span style={{ background: context.tokens.color[name] }} /><small>{name}</small></div>)}</div></section>
+        {paths && <section className="inspector-section storage-panel"><div className="inspector-title"><GitBranch size={16} /><strong>事实源</strong><Check size={14} /></div><p>.design-harness 由目标仓库和 Git 管理。</p><code>{paths.storageRoot}</code></section>}
+      </>
+    );
+  };
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar left-sidebar">
+        <div className="brand"><div className="brand-mark"><Layers3 size={19} /></div><div><strong>Design Harness</strong><span>repository-native assets</span></div></div>
+        <label className="project-picker"><span>设计项目</span><select value={projectId} onChange={(event) => void loadProject(event.target.value)} disabled={busy}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
+        <nav className="side-nav">
+          <button className={view === 'screens' ? 'active' : ''} onClick={() => switchView('screens')}><Grid2X2 size={17} />Screens</button>
+          <button className={view === 'components' ? 'active' : ''} onClick={() => switchView('components')}><Component size={17} />Components</button>
+          <button className={view === 'tokens' ? 'active' : ''} onClick={() => switchView('tokens')}><SwatchBook size={17} />Tokens</button>
+        </nav>
+        {view === 'screens' ? renderScreensSidebar() : view === 'components' ? renderComponentsSidebar() : renderTokensSidebar()}
+        <div className="system-status"><span className="status-dot" /><div><strong>Repository linked</strong><small>{context.tokens.meta.name} · v{context.tokens.meta.version}</small></div></div>
+      </aside>
+
+      <section className="workspace">
+        <header className="toolbar">
+          <div className="toolbar-title"><span className="crumb">{context.project.name} /</span><strong>{view === 'screens' ? selected?.name : view === 'components' ? 'Components' : 'Tokens'}</strong></div>
+          <div className="toolbar-controls">
+            <button onClick={() => void copyContext()}><Clipboard size={15} />ChatGPT Context</button>
+            <button onClick={() => void loadProjects()} disabled={busy}><RefreshCw className={busy ? 'spin' : ''} size={15} />刷新</button>
+            {view === 'screens' && <label className="device-select"><Smartphone size={15} /><select aria-label="设备" value="iphone-16-pro" onChange={() => undefined}><option value="iphone-16-pro">iPhone 16 Pro</option></select><ChevronDown size={13} /></label>}
+            {view === 'screens' && <label><span>{Math.round(zoom * 100)}%</span><input type="range" min="0.55" max="1" step="0.01" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label>}
+          </div>
+        </header>
+        {notice && <div className={`notice ${notice.kind}`}>{notice.kind === 'success' ? <CheckCircle2 size={15} /> : <CircleAlert size={15} />}{notice.message}<button aria-label="关闭提示" onClick={() => setNotice(null)}>×</button></div>}
+        {view === 'screens' && selected ? (
+          <div className="canvas-grid">
+            <div className="artboard-label"><strong>{selected.name}</strong><span>{context.tokens.device.iphoneWidth} × {context.tokens.device.iphoneHeight}</span></div>
+            <div className="device-frame" style={{ transform: `scale(${zoom})` }}><div className="dynamic-island" /><MockScreen key={selected.id} spec={selected} onNavigateScreen={setSelectedId} /></div>
+          </div>
+        ) : renderAssetWorkspace()}
+      </section>
+
+      <aside className="sidebar inspector">
+        {view === 'screens' ? (
+          <>
+            <div className="inspector-tabs">
+              <button className={inspectorTab === 'inspect' ? 'active' : ''} onClick={() => setInspectorTab('inspect')}>Inspect</button>
+              <button className={inspectorTab === 'spec' ? 'active' : ''} onClick={() => setInspectorTab('spec')}>Spec</button>
+              <button className={inspectorTab === 'flow' ? 'active' : ''} onClick={() => setInspectorTab('flow')}>Flow</button>
+            </div>
+            {renderInspector()}
+          </>
+        ) : (
+          <>
+            <div className="inspector-tabs single-tab"><button className="active">Repository Asset</button></div>
+            <section className="inspector-section"><div className="inspector-title"><GitBranch size={16} /><strong>存储规则</strong></div><p>编辑器保存的是目标仓库里的正式 JSON，不是浏览器缓存。</p>{paths && <code className="path-code">{view === 'tokens' ? paths.tokens : paths.components}</code>}</section>
+            <section className="inspector-section"><div className="inspector-title"><Clipboard size={16} /><strong>ChatGPT 可读</strong></div><p>Context API 一次返回 Manifest、Token、组件契约和所有 Screen Spec。</p><button className="inspector-action" onClick={() => void copyContext()}><Clipboard size={14} />复制完整上下文</button></section>
+            {view === 'components' && selectedComponent && <section className="inspector-section"><div className="inspector-title"><Component size={16} /><strong>{selectedComponent.name}</strong></div><p>{selectedComponent.purpose}</p><ul>{selectedComponent.allowedProps.map((prop) => <li key={prop}>{prop}</li>)}</ul></section>}
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}

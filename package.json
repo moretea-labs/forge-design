@@ -1,0 +1,43 @@
+{
+  "name": "@moretea-labs/forge-design",
+  "version": "0.3.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "npm run validate:design && npm run typecheck && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json --pretty false",
+    "test": "vitest run",
+    "validate:design": "node scripts/validate-design-system.mjs",
+    "design": "node scripts/design.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "1.28.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "typescript": "7.0.2",
+    "vite": "8.2.0",
+    "vitest": "4.1.10"
+  },
+  "description": "Repository-native design system workspace and Forge external provider for deterministic design assets.",
+  "license": "MIT",
+  "homepage": "https://github.com/moretea-labs/forge-design#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moretea-labs/forge-design.git"
+  },
+  "bugs": {
+    "url": "https://github.com/moretea-labs/forge-design/issues"
+  },
+  "bin": {
+    "forge-design": "scripts/design.mjs"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

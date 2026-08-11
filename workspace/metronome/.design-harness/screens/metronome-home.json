@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "metronome-home",
+  "name": "节拍器首页",
+  "device": "iphone-16-pro",
+  "goal": "让新手在三秒内完成 BPM 调整并开始练习。",
+  "primaryAction": "start-practice",
+  "constraints": [
+    "BPM 与开始练习必须是首屏视觉中心",
+    "单拍轨迹只表达一拍，且不能成为最高区域",
+    "首页不重复承载高级节奏设置"
+  ],
+  "nodes": [
+    {
+      "id": "header",
+      "component": "ScreenHeader",
+      "props": {
+        "eyebrow": "今日练习",
+        "title": "节拍训练",
+        "actionLabel": "设置"
+      }
+    },
+    {
+      "id": "tempo",
+      "component": "BPMController",
+      "props": {
+        "initialBpm": 72,
+        "min": 30,
+        "max": 220
+      }
+    },
+    {
+      "id": "trajectory",
+      "component": "BeatTrajectory",
+      "props": {
+        "beats": 4,
+        "compact": true
+      }
+    },
+    {
+      "id": "summary",
+      "component": "PracticeSummary",
+      "props": {
+        "duration": "12 分钟",
+        "streak": "连续 4 天"
+      }
+    },
+    {
+      "id": "start",
+      "component": "PrimaryAction",
+      "props": {
+        "label": "开始练习",
+        "activeLabel": "暂停练习"
+      }
+    }
+  ]
+}

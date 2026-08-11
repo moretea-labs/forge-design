@@ -1,0 +1,35 @@
+{
+  "$schema": "./schemas/forge-plugin.schema.json",
+  "id": "design",
+  "name": "Forge Design",
+  "version": "0.3.0",
+  "mode": "external",
+  "canonicalStorage": ".design-harness",
+  "repoHarnessAdapter": null,
+  "entrypoints": {
+    "web": "npm run dev",
+    "cli": "forge-design",
+    "provider": "scripts/forge-provider.mjs"
+  },
+  "capabilities": [
+    "design.projects",
+    "design.read",
+    "design.write"
+  ],
+  "protocolVersion": "1.0",
+  "scope": "controller",
+  "provider": "moretea-labs",
+  "repositoryRegistrationRequired": false,
+  "transport": {
+    "kind": "managed-cli-json",
+    "entrypoint": "scripts/forge-provider.mjs"
+  },
+  "actions": [
+    "design_list_projects",
+    "design_register_project",
+    "design_get_context",
+    "design_validate",
+    "design_export_markdown",
+    "design_import_markdown"
+  ]
+}

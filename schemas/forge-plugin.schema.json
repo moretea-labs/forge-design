@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.moretea-labs.dev/schemas/forge-plugin.schema.json",
+  "title": "Forge Design plugin manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "version", "protocolVersion", "mode", "scope", "provider", "repositoryRegistrationRequired", "transport", "entrypoints", "capabilities", "actions"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "const": "design" },
+    "name": { "const": "Forge Design" },
+    "version": { "type": "string", "minLength": 1 },
+    "protocolVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+    "mode": { "const": "external" },
+    "scope": { "const": "controller" },
+    "provider": { "type": "string", "minLength": 1 },
+    "repositoryRegistrationRequired": { "const": false },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "entrypoint"],
+      "properties": {
+        "kind": { "const": "managed-cli-json" },
+        "entrypoint": { "type": "string", "minLength": 1 }
+      }
+    },
+    "entrypoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["web", "cli", "provider"],
+      "properties": {
+        "web": { "type": "string" },
+        "cli": { "type": "string" },
+        "provider": { "type": "string" }
+      }
+    },
+    "capabilities": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "actions": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+  }
+}
