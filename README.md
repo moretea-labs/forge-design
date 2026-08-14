@@ -1,10 +1,10 @@
 # Forge Design
 
-<p align="center"><strong>Repository-native design workspace and official design provider for Forge.</strong></p>
-<p align="center"><a href="https://github.com/moretea-labs/forge">Forge</a> · <a href="docs/CHATGPT_INTEGRATION.md">ChatGPT integration</a> · <a href="docs/STORAGE.md">Storage model</a> · <a href="SUPPORT.md">Support</a></p>
+<p align="center"><strong>Repository-native product and UI design workspace and official design provider for Forge.</strong></p>
+<p align="center"><a href="https://github.com/moretea-labs/forge">Forge</a> · <a href="docs/PRODUCT_DESIGN_WORKFLOW.md">Product design workflow</a> · <a href="docs/CHATGPT_INTEGRATION.md">ChatGPT integration</a> · <a href="docs/STORAGE.md">Storage model</a> · <a href="SUPPORT.md">Support</a></p>
 <p align="center"><img alt="CI" src="https://github.com/moretea-labs/forge-design/actions/workflows/ci.yml/badge.svg"> <img alt="Release" src="https://img.shields.io/github/v/release/moretea-labs/forge-design?sort=semver"> <img alt="Node" src="https://img.shields.io/badge/Node.js-20%2B-green"> <img alt="License" src="https://img.shields.io/github/license/moretea-labs/forge-design"></p>
 
-Forge Design gives developers and AI assistants a **deterministic, Git-reviewable design model** instead of hiding canonical design state inside a browser or proprietary canvas. Tokens, component contracts, screens, and `design.md` live with the target repository and can be read, rendered, validated, edited, diffed, and reviewed like code.
+Forge Design gives developers and AI assistants a **deterministic, Git-reviewable product-design model** instead of hiding canonical design state inside a browser or proprietary canvas. A screen is treated as the result of a product flow: user job, information hierarchy, state semantics, interaction model, Screen Family, system interaction patterns, composition, components, and tokens are reasoned about in that order. The current canonical visual assets — tokens, component contracts, screens, and `design.md` — live with the target repository and can be read, rendered, validated, edited, diffed, and reviewed like code.
 
 ## Install through Forge
 
@@ -48,7 +48,7 @@ npm run dev
 
 Open `http://127.0.0.1:4173`.
 
-The workspace provides project discovery, Screens/Components/Tokens views, visual rendering, repository-backed editing, design lint, inspector views, deterministic `design.md` import/export, and ChatGPT context generation.
+The workspace currently provides project discovery, Screens/Components/Tokens views, visual rendering, repository-backed editing, design lint, inspector views, deterministic `design.md` import/export, and ChatGPT context generation. Its product direction is broader: upstream product briefs, journeys, information/state models, interaction contracts, Screen Families, system patterns, and runtime review evidence should become first-class repository-native design state rather than remaining implicit in a screen or chat.
 
 ## CLI
 
@@ -104,7 +104,7 @@ npm test
 npm run build
 ```
 
-See [Storage](docs/STORAGE.md), [ChatGPT Integration](docs/CHATGPT_INTEGRATION.md), [Plugin Contract](docs/PLUGIN_CONTRACT.md), and the Forge [Plugin Management guide](https://github.com/moretea-labs/forge/blob/main/docs/forge-plugin-management.md).
+See [Product Design Workflow](docs/PRODUCT_DESIGN_WORKFLOW.md), [Storage](docs/STORAGE.md), [ChatGPT Integration](docs/CHATGPT_INTEGRATION.md), [Plugin Contract](docs/PLUGIN_CONTRACT.md), and the Forge [Plugin Management guide](https://github.com/moretea-labs/forge/blob/main/docs/forge-plugin-management.md).
 
 ## Project
 

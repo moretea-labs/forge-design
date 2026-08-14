@@ -4,13 +4,18 @@ ChatGPT and Forge adapters must use the same repository-owned asset model as the
 
 ## Recommended read flow
 
+Before composing UI, follow the product-design workflow in [`PRODUCT_DESIGN_WORKFLOW.md`](PRODUCT_DESIGN_WORKFLOW.md). A feature name or isolated screenshot is not sufficient context when the screen belongs to a larger create/read/edit/manage journey.
+
 1. Discover projects with `npm run --silent design -- projects` or `GET /api/design/projects`.
    For a new external repository, first run `npm run --silent design -- register --project-root <absolute-path>` once.
-2. For structured agents, read one complete deterministic context with `npm run --silent design -- context --project <id>` or `GET /api/design/projects/<id>/context`.
-3. For portable editing, export `design.md` with `npm run --silent design -- export-design-md --project <id> --file /tmp/design.md` or `GET /api/design/projects/<id>/design.md`.
-4. Use the returned token document and component contracts before creating or changing a Screen Spec.
-5. Import an edited Markdown transport with `npm run --silent design -- import-design-md --project <id> --file /tmp/design.md` or `PUT /api/design/projects/<id>/design.md` using `text/markdown`.
-6. Validate the project, review the resulting granular JSON Git diff, and run project checks.
+2. Establish the user job and review the related product flow: management/list, create, detail, edit, destructive/archive actions, and other screens that define the same product logic. Identify the information model, meaningful states, interaction model, Screen Family, and relevant system patterns before choosing layout.
+3. For structured agents, read one complete deterministic context with `npm run --silent design -- context --project <id>` or `GET /api/design/projects/<id>/context`.
+4. For portable editing, export `design.md` with `npm run --silent design -- export-design-md --project <id> --file /tmp/design.md` or `GET /api/design/projects/<id>/design.md`.
+5. Use approved Screen Family references and system interaction contracts first; only then use the returned component contracts and token document to implement or revise a Screen Spec.
+6. Import an edited Markdown transport with `npm run --silent design -- import-design-md --project <id> --file /tmp/design.md` or `PUT /api/design/projects/<id>/design.md` using `text/markdown`.
+7. Render and review the real screen and relevant interaction path, validate sibling consistency, then validate the project and review the resulting granular JSON Git diff.
+
+The current canonical asset schema does not yet encode every upstream product-design concept. Until it does, agents must not infer that the absence of a product-brief asset means those decisions can be skipped.
 
 The context payload contains the manifest, storage protocol, tokens, components, and all independent screens. It is transport-independent and intentionally contains no browser-only state. The Markdown transport embeds deterministic fenced canonical JSON sections for project metadata, tokens, component contracts, and each screen, so import is unambiguous and round-trippable.
 
