@@ -4,7 +4,7 @@
 <p align="center"><a href="https://github.com/moretea-labs/forge">Forge</a> · <a href="docs/PRODUCT_DESIGN_WORKFLOW.md">Product design workflow</a> · <a href="docs/CHATGPT_INTEGRATION.md">ChatGPT integration</a> · <a href="docs/STORAGE.md">Storage model</a> · <a href="SUPPORT.md">Support</a></p>
 <p align="center"><img alt="CI" src="https://github.com/moretea-labs/forge-design/actions/workflows/ci.yml/badge.svg"> <img alt="Release" src="https://img.shields.io/github/v/release/moretea-labs/forge-design?sort=semver"> <img alt="Node" src="https://img.shields.io/badge/Node.js-20%2B-green"> <img alt="License" src="https://img.shields.io/github/license/moretea-labs/forge-design"></p>
 
-Forge Design gives developers and AI assistants a **deterministic, Git-reviewable product-design model** instead of hiding canonical design state inside a browser or proprietary canvas. A screen is treated as the result of a product flow: user job, information hierarchy, state semantics, interaction model, Screen Family, system interaction patterns, composition, components, and tokens are reasoned about in that order. The current canonical visual assets — tokens, component contracts, screens, and `design.md` — live with the target repository and can be read, rendered, validated, edited, diffed, and reviewed like code.
+Forge Design gives developers and AI assistants a **deterministic, Git-reviewable product-design model** instead of hiding canonical design state inside a browser or proprietary canvas. A screen is treated as the result of a product flow: user job, information hierarchy, state semantics, interaction model, Screen Family, system interaction patterns, composition, components, and tokens are reasoned about in that order. The canonical model — Product Contract, tokens, component contracts, screens, and `design.md` — live with the target repository and can be read, rendered, validated, edited, diffed, and reviewed like code.
 
 ## Install through Forge
 
@@ -23,6 +23,7 @@ Each target repository can own:
 <target-repository>/
 └── .design-harness/
     ├── project.json
+    ├── product.json
     ├── tokens.json
     ├── components.json
     ├── screens/
@@ -30,6 +31,7 @@ Each target repository can own:
     └── README.md
 ```
 
+- `product.json` is the upstream Product Contract: User Job, product goal, information/state/interaction models, flows, Interaction Patterns, and Golden review state.
 - `tokens.json` is the canonical token source.
 - `components.json` defines allowed component contracts and props.
 - Every screen is an independent reviewable JSON file.
@@ -48,13 +50,14 @@ npm run dev
 
 Open `http://127.0.0.1:4173`.
 
-The workspace currently provides project discovery, Screens/Components/Tokens views, visual rendering, repository-backed editing, design lint, inspector views, deterministic `design.md` import/export, and ChatGPT context generation. Its product direction is broader: upstream product briefs, journeys, information/state models, interaction contracts, Screen Families, system patterns, and runtime review evidence should become first-class repository-native design state rather than remaining implicit in a screen or chat.
+The workspace opens in **Product** rather than Screens. It exposes the repository-native Product Contract, full flows, information/state/interaction decisions, Interaction Pattern promotion state, runtime review evidence, and Golden blockers before downstream Screens/Components/Tokens. A captured screenshot is not treated as reviewed: the gate distinguishes `Captured → Model Visible → Visual Reviewed → User Accepted`.
 
 ## CLI
 
 ```bash
 npm run --silent design -- projects
 npm run --silent design -- context --project metronome
+npm run --silent design -- get-product --project metronome
 npm run --silent design -- get-tokens --project metronome
 npm run --silent design -- get-screen --project metronome --screen metronome-home
 npm run --silent design -- validate --project metronome
@@ -63,6 +66,7 @@ npm run --silent design -- validate --project metronome
 Write operations accept bounded JSON files:
 
 ```bash
+npm run --silent design -- put-product --project metronome --file /tmp/product.json
 npm run --silent design -- put-screen --project metronome --file /tmp/screen.json
 npm run --silent design -- put-tokens --project metronome --file /tmp/tokens.json
 npm run --silent design -- put-components --project metronome --file /tmp/components.json
@@ -108,6 +112,6 @@ See [Product Design Workflow](docs/PRODUCT_DESIGN_WORKFLOW.md), [Storage](docs/S
 
 ## Project
 
-Current release: `v0.3.0`. Use Issues for reproducible design/provider bugs and feature requests. Cross-product Forge questions belong in [Forge Discussions](https://github.com/moretea-labs/forge/discussions). Security reports should use GitHub Private Vulnerability Reporting; see [SECURITY.md](SECURITY.md).
+Latest published release: `v0.3.0`; current main targets `v0.4.0` with first-class Product Contracts and Golden gates. Use Issues for reproducible design/provider bugs and feature requests. Cross-product Forge questions belong in [Forge Discussions](https://github.com/moretea-labs/forge/discussions). Security reports should use GitHub Private Vulnerability Reporting; see [SECURITY.md](SECURITY.md).
 
 Licensed under the [MIT License](LICENSE).

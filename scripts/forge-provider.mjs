@@ -2,10 +2,10 @@
 import { createInterface } from 'node:readline';
 import { createProjectStore } from '../server/project-store.mjs';
 
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const PLUGIN_ID = 'design';
 const capabilities = ['design.projects', 'design.read', 'design.write'];
-const actions = ['design_list_projects', 'design_register_project', 'design_get_context', 'design_validate', 'design_export_markdown', 'design_import_markdown'];
+const actions = ['design_list_projects', 'design_register_project', 'design_get_context', 'design_get_product_model', 'design_put_product_model', 'design_validate', 'design_export_markdown', 'design_import_markdown'];
 const store = createProjectStore();
 
 function write(value) { process.stdout.write(`${JSON.stringify(value)}\n`); }
@@ -21,6 +21,8 @@ async function execute(actionId, input = {}) {
     case 'design_list_projects': return { projects: await store.listProjects() };
     case 'design_register_project': return await store.registerProjectRoot(input.project_root);
     case 'design_get_context': return await store.getContext(input.project_id);
+    case 'design_get_product_model': return await store.getProductModel(input.project_id);
+    case 'design_put_product_model': return await store.putProductModel(input.project_id, input.product);
     case 'design_validate': return await store.validateProject(input.project_id);
     case 'design_export_markdown': return { project_id: input.project_id, markdown: await store.exportDesignMarkdown(input.project_id) };
     case 'design_import_markdown': return await store.importDesignMarkdown(input.project_id, input.markdown);

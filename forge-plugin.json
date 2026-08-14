@@ -2,7 +2,7 @@
   "$schema": "./schemas/forge-plugin.schema.json",
   "id": "design",
   "name": "Forge Design",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "mode": "external",
   "canonicalStorage": ".design-harness",
   "repoHarnessAdapter": null,
@@ -28,6 +28,8 @@
     "design_list_projects",
     "design_register_project",
     "design_get_context",
+    "design_get_product_model",
+    "design_put_product_model",
     "design_validate",
     "design_export_markdown",
     "design_import_markdown"

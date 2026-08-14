@@ -6,6 +6,7 @@ Forge Design does not own project design data. Each target repository owns one t
 <target-repository>/
 └── .design-harness/
     ├── project.json
+    ├── product.json
     ├── tokens.json
     ├── components.json
     ├── screens/
@@ -15,6 +16,7 @@ Forge Design does not own project design data. Each target repository owns one t
 
 ## Authority
 
+- `.design-harness/product.json` is the upstream Product Contract and Golden-review source of truth. It contains the User Job, product goal, information/state/interaction models, flows, system-pattern candidates, and review state.
 - `.design-harness/tokens.json` is the only token source of truth.
 - `.design-harness/components.json` is the component contract available to ChatGPT.
 - Each `screens/*.json` file is one independent artboard and reviewable Git artifact.
@@ -31,4 +33,4 @@ The local store discovers child repositories below `workspace/`, roots registere
 
 ## Writes
 
-All persisted JSON is validated, written to a same-directory temporary file, and atomically renamed. IDs are restricted to safe filename characters, screen filenames must match their document IDs, and duplicate screen node IDs are rejected.
+All persisted JSON is validated. New projects receive a draft `product.json`; legacy projects without it remain readable but are explicitly `unmodeled` and cannot be promoted to Golden. Product references to screens/flows/patterns are checked before portable imports are persisted. Writes use a same-directory temporary file and atomic rename. IDs are restricted to safe filename characters, screen filenames must match their document IDs, and duplicate screen node IDs are rejected.

@@ -30,11 +30,14 @@ export function renderDesignMarkdown(context) {
     '> Portable AI/human-readable view of the canonical `.design-harness` JSON assets. The fenced JSON sections are authoritative for import.',
     '',
     jsonSection('project', 'Project', context.project).trimEnd(),
+  ];
+  if (context.product) parts.push('', jsonSection('product', 'Product Contract', context.product).trimEnd());
+  parts.push(
     '',
     jsonSection('tokens', 'Design Tokens', context.tokens).trimEnd(),
     '',
     jsonSection('components', 'Component Contracts', context.components).trimEnd(),
-  ];
+  );
   for (const screen of screens) {
     parts.push('', jsonSection(`screen:${screen.id}`, `Screen: ${compactHeading(screen.name)} (${screen.id})`, screen).trimEnd());
   }
@@ -75,7 +78,7 @@ export function parseDesignMarkdown(markdown) {
 
   const screens = [];
   for (const [key, document] of sections) {
-    if (key === 'project' || key === 'tokens' || key === 'components') continue;
+    if (key === 'project' || key === 'product' || key === 'tokens' || key === 'components') continue;
     if (!key.startsWith('screen:') || key.length === 'screen:'.length) {
       throw new DesignMarkdownError(`Unknown design.md section: ${key}.`, 'DESIGN_MARKDOWN_UNKNOWN_SECTION');
     }
@@ -90,6 +93,7 @@ export function parseDesignMarkdown(markdown) {
   return {
     schemaVersion: FORMAT_VERSION,
     project: sections.get('project'),
+    product: sections.get('product') ?? null,
     tokens: sections.get('tokens'),
     components: sections.get('components'),
     screens,

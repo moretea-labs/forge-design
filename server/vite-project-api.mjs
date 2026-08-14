@@ -77,6 +77,10 @@ export function designHarnessApiPlugin(options = {}) {
           }
           if (resource === 'validate' && method === 'GET') return sendJson(response, 200, await store.validateProject(projectId));
           if (resource === 'paths' && method === 'GET') return sendJson(response, 200, await store.getPaths(projectId));
+          if (resource === 'product') {
+            if (method === 'GET') return sendJson(response, 200, await store.getProductModel(projectId));
+            if (method === 'PUT') return sendJson(response, 200, await store.putProductModel(projectId, await readJsonBody(request)));
+          }
           if (resource === 'tokens') {
             if (method === 'GET') return sendJson(response, 200, await store.getTokens(projectId));
             if (method === 'PUT') return sendJson(response, 200, await store.putTokens(projectId, await readJsonBody(request)));

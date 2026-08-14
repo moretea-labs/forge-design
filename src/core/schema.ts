@@ -39,6 +39,51 @@ export type ScreenSpec = {
   nodes: ScreenNode[];
 };
 
+
+export type ProductInformationRole = 'identity' | 'primary_meaning' | 'evidence' | 'action' | 'status' | 'next_action' | 'context' | 'supporting_metadata';
+export type ProductPriority = 'primary' | 'secondary' | 'supporting';
+export type ProductReviewStage = 'not_started' | 'captured' | 'model_visible' | 'visual_reviewed';
+
+export type ProductDesignModel = {
+  schemaVersion: 1;
+  brief: {
+    status: 'draft' | 'ready';
+    userJob: string;
+    productGoal: string;
+    businessSemantics: string[];
+    primaryTasks: string[];
+    secondaryTasks: string[];
+    informationHierarchy: Array<{ role: ProductInformationRole; description: string; priority: ProductPriority }>;
+    stateModel: Array<{ id: string; meaning: string; userImpact: string }>;
+    interactionModel: Array<{ id: string; semantics: string; patternId?: string }>;
+    screenFamily: string;
+    nonGoals: string[];
+    preservedSemantics: string[];
+  };
+  flows: Array<{ id: string; name: string; userJob: string; screenIds: string[]; status: 'draft' | 'candidate' | 'validated' }>;
+  patterns: Array<{ id: string; name: string; semanticPurpose: string; status: 'local' | 'golden_candidate' | 'approved'; validatedFlowIds: string[]; siblingEvidence: string[]; owner?: string }>;
+  golden: {
+    status: 'draft' | 'candidate' | 'approved';
+    screenIds: string[];
+    flowIds: string[];
+    patternIds: string[];
+    review: { stage: ProductReviewStage; userDecision: 'pending' | 'accepted' | 'rejected'; artifactRefs: string[]; notes: string[] };
+  };
+};
+
+export type ProductGoldenGate = {
+  modeled: boolean;
+  status: 'unmodeled' | 'draft' | 'candidate' | 'approved';
+  productContractReady: boolean;
+  flowReady: boolean;
+  interactionPatternsReady: boolean;
+  runtimeReviewStage: ProductReviewStage;
+  runtimeEvidenceReady: boolean;
+  userDecision: 'pending' | 'accepted' | 'rejected';
+  canApprove: boolean;
+  blockers: string[];
+};
+
 export type DesignIssue = {
   severity: 'error' | 'warning';
   rule: string;
@@ -91,6 +136,8 @@ export type DesignProjectContext = {
   tokens: DesignTokens;
   components: ComponentContractsDocument;
   screens: ScreenSpec[];
+  product: ProductDesignModel | null;
+  goldenGate: ProductGoldenGate;
 };
 
 export type DesignProjectPaths = {
@@ -100,4 +147,5 @@ export type DesignProjectPaths = {
   tokens: string;
   components: string;
   screens: string;
+  product: string;
 };

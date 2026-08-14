@@ -1,0 +1,350 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repo-harness.local/design-harness/product.schema.json",
+  "title": "Forge Design product contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "brief",
+    "flows",
+    "patterns",
+    "golden"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "brief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "userJob",
+        "productGoal",
+        "businessSemantics",
+        "primaryTasks",
+        "secondaryTasks",
+        "informationHierarchy",
+        "stateModel",
+        "interactionModel",
+        "screenFamily",
+        "nonGoals",
+        "preservedSemantics"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "draft",
+            "ready"
+          ]
+        },
+        "userJob": {
+          "type": "string",
+          "minLength": 1
+        },
+        "productGoal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "businessSemantics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "primaryTasks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "secondaryTasks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "informationHierarchy": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "role",
+              "description",
+              "priority"
+            ],
+            "properties": {
+              "role": {
+                "enum": [
+                  "identity",
+                  "primary_meaning",
+                  "evidence",
+                  "action",
+                  "status",
+                  "next_action",
+                  "context",
+                  "supporting_metadata"
+                ]
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "priority": {
+                "enum": [
+                  "primary",
+                  "secondary",
+                  "supporting"
+                ]
+              }
+            }
+          }
+        },
+        "stateModel": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "meaning",
+              "userImpact"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              },
+              "meaning": {
+                "type": "string",
+                "minLength": 1
+              },
+              "userImpact": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "interactionModel": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "semantics"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              },
+              "semantics": {
+                "type": "string",
+                "minLength": 1
+              },
+              "patternId": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              }
+            }
+          }
+        },
+        "screenFamily": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nonGoals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "preservedSemantics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "flows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "userJob",
+          "screenIds",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "userJob": {
+            "type": "string",
+            "minLength": 1
+          },
+          "screenIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]*$"
+            }
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "candidate",
+              "validated"
+            ]
+          }
+        }
+      }
+    },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "semanticPurpose",
+          "status",
+          "validatedFlowIds",
+          "siblingEvidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "semanticPurpose": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "local",
+              "golden_candidate",
+              "approved"
+            ]
+          },
+          "validatedFlowIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]*$"
+            }
+          },
+          "siblingEvidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "golden": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "screenIds",
+        "flowIds",
+        "patternIds",
+        "review"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "draft",
+            "candidate",
+            "approved"
+          ]
+        },
+        "screenIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          }
+        },
+        "flowIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          }
+        },
+        "patternIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          }
+        },
+        "review": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "userDecision",
+            "artifactRefs",
+            "notes"
+          ],
+          "properties": {
+            "stage": {
+              "enum": [
+                "not_started",
+                "captured",
+                "model_visible",
+                "visual_reviewed"
+              ]
+            },
+            "userDecision": {
+              "enum": [
+                "pending",
+                "accepted",
+                "rejected"
+              ]
+            },
+            "artifactRefs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

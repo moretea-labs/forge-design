@@ -1,8 +1,8 @@
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DesignStoreError, ProjectStore, validateScreen, validateTokens } from './project-store.mjs';
+import { DesignStoreError, ProjectStore, validateProductModel, validateScreen, validateTokens } from './project-store.mjs';
 import { parseDesignMarkdown, renderDesignMarkdown } from './design-markdown.mjs';
 
 async function createFixture() {
@@ -129,16 +129,91 @@ describe('ProjectStore local project registry', () => {
   });
 });
 
+describe('ProjectStore product-design model', () => {
+  it('initializes a canonical Product Contract and exposes Golden gate state in context', async () => {
+    const { store, projectRoot } = await createFixture();
+    const productPath = join(projectRoot, '.design-harness', 'product.json');
+    const persisted = JSON.parse(await readFile(productPath, 'utf8'));
+    expect(() => validateProductModel(persisted)).not.toThrow();
+    const context = await store.getContext('fixture');
+    expect(context.product?.brief.userJob).toContain('primary user job');
+    expect(context.goldenGate).toMatchObject({ modeled: true, status: 'draft', flowReady: false, runtimeReviewStage: 'not_started', canApprove: false });
+  });
+
+  it('keeps legacy visual-only projects readable but blocks Golden promotion', async () => {
+    const { store, projectRoot } = await createFixture();
+    await rm(join(projectRoot, '.design-harness', 'product.json'));
+    const context = await store.getContext('fixture');
+    expect(context.product).toBeNull();
+    expect(context.goldenGate).toMatchObject({ modeled: false, status: 'unmodeled', canApprove: false });
+    const validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(true);
+    expect(validation.warnings.join(' ')).toContain('legacy visual-only');
+  });
+
+  it('does not equate screenshot capture with model-visible or visual review', async () => {
+    const { store } = await createFixture();
+    const product = await store.getProductModel('fixture');
+    product.brief.status = 'ready';
+    product.flows[0].status = 'validated';
+    product.golden.status = 'approved';
+    product.golden.review = { stage: 'captured', userDecision: 'accepted', artifactRefs: ['controller-artifacts/screenshot.png'], notes: [] };
+    await store.putProductModel('fixture', product);
+    const validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(false);
+    expect(validation.goldenGate.runtimeEvidenceReady).toBe(true);
+    expect(validation.goldenGate.runtimeReviewStage).toBe('captured');
+    expect(validation.goldenGate.canApprove).toBe(false);
+    expect(validation.errors.join(' ')).toContain('Captured is not Model Visible or Visual Reviewed');
+  });
+
+  it('requires flow validation, runtime evidence, visual review, and user acceptance before Approved Golden', async () => {
+    const { store } = await createFixture();
+    const product = await store.getProductModel('fixture');
+    product.brief.status = 'ready';
+    product.flows[0].status = 'validated';
+    product.golden.status = 'approved';
+    product.golden.review = { stage: 'visual_reviewed', userDecision: 'accepted', artifactRefs: ['controller-artifacts/review.png'], notes: ['Reviewed rendered output.'] };
+    await store.putProductModel('fixture', product);
+    const validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(true);
+    expect(validation.goldenGate).toMatchObject({ productContractReady: true, flowReady: true, runtimeEvidenceReady: true, runtimeReviewStage: 'visual_reviewed', userDecision: 'accepted', canApprove: true });
+  });
+
+  it('requires sibling evidence before an Interaction Pattern can participate in Approved Golden', async () => {
+    const { store } = await createFixture();
+    const product = await store.getProductModel('fixture');
+    product.brief.status = 'ready';
+    product.flows[0].status = 'validated';
+    product.patterns = [{ id: 'filter-selection', name: 'Filter Selection', semanticPurpose: 'Select a result subset rather than toggle a setting.', status: 'approved', validatedFlowIds: ['primary-flow'], siblingEvidence: [] }];
+    product.brief.interactionModel[0].patternId = 'filter-selection';
+    product.golden.patternIds = ['filter-selection'];
+    product.golden.status = 'approved';
+    product.golden.review = { stage: 'visual_reviewed', userDecision: 'accepted', artifactRefs: ['controller-artifacts/review.png'], notes: [] };
+    await store.putProductModel('fixture', product);
+    let validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(false);
+    expect(validation.goldenGate.interactionPatternsReady).toBe(false);
+    product.patterns[0].siblingEvidence = ['settings-filter-sibling'];
+    await store.putProductModel('fixture', product);
+    validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(true);
+    expect(validation.goldenGate.interactionPatternsReady).toBe(true);
+  });
+});
+
 describe('ProjectStore design.md transport', () => {
   it('round-trips the canonical Design Model through deterministic Markdown and imports validated edits', async () => {
     const { store } = await createFixture();
     const exported = await store.exportDesignMarkdown('fixture');
     expect(exported).toContain('<!-- design-harness-format:1 -->');
     expect(exported).toContain('```json design-harness:project');
+    expect(exported).toContain('```json design-harness:product');
     expect(exported).toContain('```json design-harness:screen:home');
 
     const bundle = parseDesignMarkdown(exported);
     bundle.project.designSystem.version = '0.2.0';
+    bundle.product.brief.productGoal = 'Edited through deterministic design.md transport.';
     bundle.tokens.meta.version = '0.2.0';
     const edited = renderDesignMarkdown(bundle);
     const result = await store.importDesignMarkdown('fixture', edited);
@@ -146,6 +221,7 @@ describe('ProjectStore design.md transport', () => {
     expect(result).toMatchObject({ schemaVersion: 1, projectId: 'fixture', mode: 'merge', importedScreenIds: ['home'] });
     expect((await store.getManifest('fixture')).designSystem.version).toBe('0.2.0');
     expect((await store.getTokens('fixture')).meta.version).toBe('0.2.0');
+    expect((await store.getProductModel('fixture')).brief.productGoal).toContain('Edited through deterministic');
     expect(await store.exportDesignMarkdown('fixture')).toBe(edited);
   });
 

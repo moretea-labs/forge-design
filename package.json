@@ -1,6 +1,6 @@
 {
   "name": "@moretea-labs/forge-design",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
@@ -23,7 +23,7 @@
     "vite": "8.2.0",
     "vitest": "4.1.10"
   },
-  "description": "Repository-native design system workspace and Forge external provider for deterministic design assets.",
+  "description": "Repository-native product and UI design workspace with Product Contracts, Golden gates, and a Forge external provider.",
   "license": "MIT",
   "homepage": "https://github.com/moretea-labs/forge-design#readme",
   "repository": {

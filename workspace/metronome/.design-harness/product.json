@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "brief": {
+    "userJob": "快速设定练习节拍并立即开始一次稳定的节奏训练。",
+    "productGoal": "让新手在最少认知负担下完成 BPM 调整、理解当前节拍并开始练习。",
+    "businessSemantics": [
+      "BPM 是当前练习的核心可变参数",
+      "开始练习是首页唯一主任务",
+      "高级节奏配置不应抢占首页主层级"
+    ],
+    "primaryTasks": [
+      "调整 BPM",
+      "开始练习"
+    ],
+    "secondaryTasks": [
+      "理解单拍轨迹",
+      "查看简要练习状态"
+    ],
+    "informationHierarchy": [
+      {
+        "role": "primary_meaning",
+        "description": "当前 BPM 与是否可以立即开始练习",
+        "priority": "primary"
+      },
+      {
+        "role": "evidence",
+        "description": "单拍轨迹与拍点帮助理解节奏",
+        "priority": "secondary"
+      },
+      {
+        "role": "supporting_metadata",
+        "description": "练习时长和连续练习等背景信息",
+        "priority": "supporting"
+      }
+    ],
+    "stateModel": [
+      {
+        "id": "idle",
+        "meaning": "尚未开始练习",
+        "userImpact": "允许调整 BPM 并开始练习"
+      },
+      {
+        "id": "running",
+        "meaning": "练习进行中",
+        "userImpact": "主操作转为停止练习"
+      }
+    ],
+    "interactionModel": [
+      {
+        "id": "tempo-adjust",
+        "semantics": "BPM 调整直接改变当前练习目标"
+      },
+      {
+        "id": "start-practice",
+        "semantics": "主按钮开始或停止练习",
+        "patternId": "primary-action"
+      }
+    ],
+    "screenFamily": "focused practice dashboard",
+    "nonGoals": [
+      "承载完整高级节奏编辑器"
+    ],
+    "preservedSemantics": [
+      "BPM 范围与开始/停止行为不因视觉重构改变"
+    ],
+    "status": "ready"
+  },
+  "flows": [
+    {
+      "id": "practice-flow",
+      "name": "开始一次节拍练习",
+      "userJob": "调整 BPM 后立即开始练习",
+      "screenIds": [
+        "metronome-home"
+      ],
+      "status": "candidate"
+    }
+  ],
+  "patterns": [
+    {
+      "id": "primary-action",
+      "name": "Primary Action",
+      "semanticPurpose": "表达当前页面唯一主任务",
+      "status": "golden_candidate",
+      "validatedFlowIds": [
+        "practice-flow"
+      ],
+      "siblingEvidence": []
+    }
+  ],
+  "golden": {
+    "status": "candidate",
+    "screenIds": [
+      "metronome-home"
+    ],
+    "flowIds": [
+      "practice-flow"
+    ],
+    "patternIds": [
+      "primary-action"
+    ],
+    "review": {
+      "stage": "captured",
+      "userDecision": "pending",
+      "artifactRefs": [],
+      "notes": [
+        "示例项目只展示 candidate gate，不伪装成已完成视觉验收。"
+      ]
+    }
+  }
+}

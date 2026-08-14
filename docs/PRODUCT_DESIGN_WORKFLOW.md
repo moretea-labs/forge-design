@@ -177,21 +177,29 @@ Before a meaningful redesign, Forge Design should be able to represent a compact
 - Non-goals and preserved semantics
 - Review evidence
 
-This brief should eventually become repository-native structured state rather than living only in chat. Until the canonical schema is extended, this document is the product contract for how Forge Design agents and UI should reason about design work.
+This brief is now repository-native structured state in `.design-harness/product.json`. The Product workspace is the default Forge Design entrypoint; screens and visual assets are downstream views of that contract.
 
-## Direction for the Forge Design product model
+## Repository-native Product Contract
 
-The current repository-native model (`tokens`, `components`, `screens`) remains valid for visual assets, but it is not sufficient as the long-term complete product-design model.
+`product.json` makes the upstream design decisions first-class and Git-reviewable. It contains:
 
-Future schema/API/UI work should make upstream product design first-class and reviewable, with concepts equivalent to:
+- Product Brief status (`draft` / `ready`) and User Job;
+- product goal, primary/secondary tasks, business and preserved semantics;
+- ordered information roles, state semantics, and interaction semantics;
+- Screen Family;
+- full product flows and their validation state;
+- Interaction Pattern candidates, their validated flows, owner, and sibling evidence;
+- Golden membership and review evidence.
 
-- product brief / user jobs
-- journeys or flows connecting related screens
-- information roles
-- state semantics
-- interaction-pattern contracts
-- Screen Family classification
-- Golden/reference relationships
-- runtime review evidence
+The computed Golden Gate is fail-closed for promotion. `golden.status = approved` is invalid unless the Product Brief is ready, all selected flows are validated, promoted patterns have compatible sibling evidence, runtime artifacts exist, review has reached `visual_reviewed`, and the user decision is `accepted`.
 
-Screens should reference these decisions instead of silently owning them. Components and tokens remain downstream implementation contracts.
+Runtime review stages are intentionally distinct:
+
+`not_started → captured → model_visible → visual_reviewed`
+
+- **Captured**: a concrete screenshot/runtime artifact exists.
+- **Model Visible**: the reviewer actually received or decoded the pixels. An `image/png` path or artifact candidate alone is not sufficient.
+- **Visual Reviewed**: composition, hierarchy, density, alignment, interaction presentation, and product finish were actually assessed.
+- **User Accepted** is a separate decision and is required for Approved Golden.
+
+This prevents test success, screenshot creation, or transport metadata from being mislabeled as visual acceptance. Components and tokens remain downstream implementation contracts.

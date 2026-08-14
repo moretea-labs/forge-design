@@ -27,16 +27,41 @@ import type {
   DesignProjectPaths,
   DesignProjectSummary,
   DesignTokens,
+  ProductDesignModel,
   ScreenSpec,
 } from './core/schema';
 import { installTokenVariables } from './design-system/tokens';
 import { MockScreen } from './components/MockScreen';
+import { ProductWorkspace } from './components/ProductWorkspace';
 
-type WorkspaceView = 'screens' | 'components' | 'tokens';
+type WorkspaceView = 'product' | 'screens' | 'components' | 'tokens';
 type InspectorTab = 'inspect' | 'spec' | 'flow';
 type Notice = { kind: 'success' | 'error'; message: string } | null;
 
 const json = (value: unknown) => JSON.stringify(value, null, 2);
+
+function productScaffold(context: DesignProjectContext): ProductDesignModel {
+  return {
+    schemaVersion: 1,
+    brief: {
+      status: 'draft',
+      userJob: 'Define the primary user job before composing screens.',
+      productGoal: 'Describe the product outcome this flow must achieve.',
+      businessSemantics: [],
+      primaryTasks: ['Define the primary task.'],
+      secondaryTasks: [],
+      informationHierarchy: [{ role: 'primary_meaning', description: 'Define what must be understood first.', priority: 'primary' }],
+      stateModel: [],
+      interactionModel: [{ id: 'primary-action', semantics: 'Define the semantic meaning of the primary action before styling it.' }],
+      screenFamily: 'unclassified',
+      nonGoals: [],
+      preservedSemantics: [],
+    },
+    flows: [{ id: 'primary-flow', name: 'Primary product flow', userJob: 'Define the end-to-end user job.', screenIds: [context.project.activeScreenId], status: 'draft' }],
+    patterns: [],
+    golden: { status: 'draft', screenIds: [context.project.activeScreenId], flowIds: ['primary-flow'], patternIds: [], review: { stage: 'not_started', userDecision: 'pending', artifactRefs: [], notes: [] } },
+  };
+}
 
 function parseDocument<T>(source: string): T {
   return JSON.parse(source) as T;
@@ -85,7 +110,7 @@ export default function App(): ReactElement {
   const [paths, setPaths] = useState<DesignProjectPaths | null>(null);
   const [selectedId, setSelectedId] = useState('');
   const [selectedComponentName, setSelectedComponentName] = useState('');
-  const [view, setView] = useState<WorkspaceView>('screens');
+  const [view, setView] = useState<WorkspaceView>('product');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect');
   const [editorText, setEditorText] = useState('');
   const [zoom, setZoom] = useState(0.78);
@@ -150,7 +175,8 @@ export default function App(): ReactElement {
 
   useEffect(() => {
     if (!context) return;
-    if (view === 'tokens') setEditorText(json(context.tokens));
+    if (view === 'product') setEditorText(json(context.product ?? productScaffold(context)));
+    else if (view === 'tokens') setEditorText(json(context.tokens));
     else if (view === 'components') setEditorText(json(context.components));
     else if (inspectorTab === 'spec' && selected) setEditorText(json(selected));
   }, [context, view, inspectorTab, selected]);
@@ -160,7 +186,9 @@ export default function App(): ReactElement {
     setBusy(true);
     setNotice(null);
     try {
-      if (view === 'tokens') {
+      if (view === 'product') {
+        await designApi.putProduct(projectId, parseDocument<ProductDesignModel>(editorText));
+      } else if (view === 'tokens') {
         const document = parseDocument<DesignTokens>(editorText);
         await designApi.putTokens(projectId, document);
         installTokenVariables(document);
@@ -215,6 +243,19 @@ export default function App(): ReactElement {
   if (!context) {
     return <div className="loading-shell"><LoaderCircle className="spin" /><strong>正在读取仓库设计资产</strong>{notice && <span>{notice.message}</span>}</div>;
   }
+
+  const renderProductSidebar = () => (
+    <>
+      <div className="sidebar-section-title"><span>Product model</span><span>{context.product ? 'canonical' : 'legacy'}</span></div>
+      <div className="product-sidebar-list">
+        <div><strong>Product Brief</strong><small>{context.product?.brief.screenFamily ?? '未建模'}</small></div>
+        <div><strong>Flows</strong><small>{context.product?.flows.length ?? 0} 条链路</small></div>
+        <div><strong>Interaction Patterns</strong><small>{context.product?.patterns.length ?? 0} 个候选</small></div>
+        <div><strong>Runtime Review</strong><small>{context.goldenGate.runtimeReviewStage}</small></div>
+        <div><strong>Golden</strong><small>{context.goldenGate.status}</small></div>
+      </div>
+    </>
+  );
 
   const renderScreensSidebar = () => (
     <>
@@ -309,20 +350,21 @@ export default function App(): ReactElement {
   return (
     <div className="app-shell">
       <aside className="sidebar left-sidebar">
-        <div className="brand"><div className="brand-mark"><Layers3 size={19} /></div><div><strong>Design Harness</strong><span>repository-native assets</span></div></div>
+        <div className="brand"><div className="brand-mark"><Layers3 size={19} /></div><div><strong>Forge Design</strong><span>product → UI design</span></div></div>
         <label className="project-picker"><span>设计项目</span><select value={projectId} onChange={(event) => void loadProject(event.target.value)} disabled={busy}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
         <nav className="side-nav">
+          <button className={view === 'product' ? 'active' : ''} onClick={() => switchView('product')}><Focus size={17} />Product</button>
           <button className={view === 'screens' ? 'active' : ''} onClick={() => switchView('screens')}><Grid2X2 size={17} />Screens</button>
           <button className={view === 'components' ? 'active' : ''} onClick={() => switchView('components')}><Component size={17} />Components</button>
           <button className={view === 'tokens' ? 'active' : ''} onClick={() => switchView('tokens')}><SwatchBook size={17} />Tokens</button>
         </nav>
-        {view === 'screens' ? renderScreensSidebar() : view === 'components' ? renderComponentsSidebar() : renderTokensSidebar()}
+        {view === 'product' ? renderProductSidebar() : view === 'screens' ? renderScreensSidebar() : view === 'components' ? renderComponentsSidebar() : renderTokensSidebar()}
         <div className="system-status"><span className="status-dot" /><div><strong>Repository linked</strong><small>{context.tokens.meta.name} · v{context.tokens.meta.version}</small></div></div>
       </aside>
 
       <section className="workspace">
         <header className="toolbar">
-          <div className="toolbar-title"><span className="crumb">{context.project.name} /</span><strong>{view === 'screens' ? selected?.name : view === 'components' ? 'Components' : 'Tokens'}</strong></div>
+          <div className="toolbar-title"><span className="crumb">{context.project.name} /</span><strong>{view === 'product' ? 'Product Contract' : view === 'screens' ? selected?.name : view === 'components' ? 'Components' : 'Tokens'}</strong></div>
           <div className="toolbar-controls">
             <button onClick={() => void copyContext()}><Clipboard size={15} />ChatGPT Context</button>
             <button onClick={() => void loadProjects()} disabled={busy}><RefreshCw className={busy ? 'spin' : ''} size={15} />刷新</button>
@@ -331,7 +373,18 @@ export default function App(): ReactElement {
           </div>
         </header>
         {notice && <div className={`notice ${notice.kind}`}>{notice.kind === 'success' ? <CheckCircle2 size={15} /> : <CircleAlert size={15} />}{notice.message}<button aria-label="关闭提示" onClick={() => setNotice(null)}>×</button></div>}
-        {view === 'screens' && selected ? (
+        {view === 'product' ? (
+          <ProductWorkspace
+            projectName={context.project.name}
+            product={context.product}
+            gate={context.goldenGate}
+            editorText={editorText}
+            onEditorChange={setEditorText}
+            onSave={() => void saveEditor()}
+            onReload={() => setEditorText(json(context.product ?? productScaffold(context)))}
+            busy={busy}
+          />
+        ) : view === 'screens' && selected ? (
           <div className="canvas-grid">
             <div className="artboard-label"><strong>{selected.name}</strong><span>{context.tokens.device.iphoneWidth} × {context.tokens.device.iphoneHeight}</span></div>
             <div className="device-frame" style={{ transform: `scale(${zoom})` }}><div className="dynamic-island" /><MockScreen key={selected.id} spec={selected} onNavigateScreen={setSelectedId} /></div>
@@ -340,7 +393,15 @@ export default function App(): ReactElement {
       </section>
 
       <aside className="sidebar inspector">
-        {view === 'screens' ? (
+        {view === 'product' ? (
+          <>
+            <div className="inspector-tabs single-tab"><button className="active">Product Gate</button></div>
+            <section className="inspector-section"><div className="inspector-title"><Focus size={16} /><strong>User Job</strong></div><p>{context.product?.brief.userJob ?? 'Product Contract 尚未写入仓库。'}</p></section>
+            <section className="inspector-section"><div className="inspector-title"><GitBranch size={16} /><strong>Promotion Gate</strong><span>{context.goldenGate.blockers.length}</span></div>{context.goldenGate.canApprove ? <div className="lint-success"><CheckCircle2 size={17} />可以进入 Approved Golden</div> : <div className="lint-list">{context.goldenGate.blockers.map((blocker) => <div key={blocker}><CircleAlert size={16} /><span>{blocker}</span></div>)}</div>}</section>
+            <section className="inspector-section"><div className="inspector-title"><FileCode2 size={16} /><strong>Review semantics</strong></div><p>Captured 只说明已有图片 artifact；必须实际进入模型视觉上下文才能标记 Model Visible，完成像素级审查后才能标记 Visual Reviewed。</p></section>
+            {paths && <section className="inspector-section storage-panel"><div className="inspector-title"><GitBranch size={16} /><strong>事实源</strong><Check size={14} /></div><code>{paths.product}</code></section>}
+          </>
+        ) : view === 'screens' ? (
           <>
             <div className="inspector-tabs">
               <button className={inspectorTab === 'inspect' ? 'active' : ''} onClick={() => setInspectorTab('inspect')}>Inspect</button>

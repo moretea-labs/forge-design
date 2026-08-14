@@ -62,6 +62,8 @@ async function run() {
     }
     case 'import-design-md': return store.importDesignMarkdown(required(options, 'project'), await readTextInput(required(options, 'file')));
     case 'path': return store.getPaths(required(options, 'project'));
+    case 'get-product': return store.getProductModel(required(options, 'project'));
+    case 'put-product': return store.putProductModel(required(options, 'project'), await readInput(required(options, 'file')));
     case 'get-tokens': return store.getTokens(required(options, 'project'));
     case 'put-tokens': return store.putTokens(required(options, 'project'), await readInput(required(options, 'file')));
     case 'get-components': return store.getComponents(required(options, 'project'));
@@ -75,7 +77,7 @@ async function run() {
       name: options.name ?? options.project,
     });
     default:
-      throw new DesignStoreError('Unknown command. Use projects, registered-roots, register, unregister, read-project, context, validate, export-design-md, import-design-md, path, get-tokens, put-tokens, get-components, put-components, list-screens, get-screen, put-screen, or init.', 400, 'UNKNOWN_COMMAND');
+      throw new DesignStoreError('Unknown command. Use projects, registered-roots, register, unregister, read-project, context, validate, export-design-md, import-design-md, path, get-product, put-product, get-tokens, put-tokens, get-components, put-components, list-screens, get-screen, put-screen, or init.', 400, 'UNKNOWN_COMMAND');
   }
 }
 
