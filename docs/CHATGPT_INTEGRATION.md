@@ -29,3 +29,7 @@ npm run --silent design -- validate --project metronome
 ```
 
 The browser's “Copy ChatGPT context” action calls the same context endpoint. This prevents prompt context, visual rendering, and repository state from drifting apart.
+
+## Golden promotion gate
+
+Do not approve or promote a Golden from a single attractive screen. Close the product-flow contract, identify reusable interaction-pattern candidates, and require real model-visible screenshot review before promotion.

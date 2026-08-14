@@ -153,6 +153,14 @@ A pattern becomes reusable only after:
 - the shared abstraction preserves the same product meaning;
 - runtime evidence shows that reuse improves consistency without forcing unrelated screens into the same composition.
 
+A Golden is not only a polished screen. Promotion should produce three linked assets:
+
+1. **Product Design Contract** — the User Job, journey, information roles, state semantics, interaction model, editable/read-only boundaries, and preserved business meaning;
+2. **Screen / Flow Golden** — the validated composition and hierarchy across the representative user journey, not only one screenshot;
+3. **Interaction Pattern Golden** — system patterns such as Search, Filter, Selection, Toggle, Primary Action, Sheet, and destructive actions that have been proven in real product semantics.
+
+A Golden candidate remains a candidate while any high-impact interaction language is unresolved, while the representative flow has not been accepted, or while screenshot evidence has not reached `Captured -> Model Visible -> Visual Reviewed`. Similar data shape, boolean implementation, or visual resemblance is not sufficient evidence that two controls belong to the same reusable pattern.
+
 ## Product Design Brief
 
 Before a meaningful redesign, Forge Design should be able to represent a compact brief containing at least:
