@@ -1,4 +1,5 @@
-const FORMAT_VERSION = 1;
+const FORMAT_VERSION = 2;
+const SUPPORTED_FORMAT_VERSIONS = new Set([1, 2]);
 const FORMAT_MARKER = `<!-- design-harness-format:${FORMAT_VERSION} -->`;
 const MAX_MARKDOWN_BYTES = 16 * 1024 * 1024;
 
@@ -32,6 +33,7 @@ export function renderDesignMarkdown(context) {
     jsonSection('project', 'Project', context.project).trimEnd(),
   ];
   if (context.product) parts.push('', jsonSection('product', 'Product Contract', context.product).trimEnd());
+  if (context.designUnits) parts.push('', jsonSection('design-units', 'Design Units', context.designUnits).trimEnd());
   parts.push(
     '',
     jsonSection('tokens', 'Design Tokens', context.tokens).trimEnd(),
@@ -60,8 +62,10 @@ export function parseDesignMarkdown(markdown) {
   if (Buffer.byteLength(markdown, 'utf8') > MAX_MARKDOWN_BYTES) {
     throw new DesignMarkdownError('design.md exceeds the 16 MiB transport limit.', 'DESIGN_MARKDOWN_TOO_LARGE');
   }
-  if (!markdown.includes(FORMAT_MARKER)) {
-    throw new DesignMarkdownError(`design.md must contain ${FORMAT_MARKER}.`, 'DESIGN_MARKDOWN_FORMAT_UNSUPPORTED');
+  const formatMatch = markdown.match(/<!-- design-harness-format:(\d+) -->/);
+  const parsedFormatVersion = formatMatch ? Number(formatMatch[1]) : null;
+  if (!SUPPORTED_FORMAT_VERSIONS.has(parsedFormatVersion)) {
+    throw new DesignMarkdownError('design.md must contain a supported design-harness-format marker.', 'DESIGN_MARKDOWN_FORMAT_UNSUPPORTED');
   }
 
   const sections = new Map();
@@ -78,7 +82,7 @@ export function parseDesignMarkdown(markdown) {
 
   const screens = [];
   for (const [key, document] of sections) {
-    if (key === 'project' || key === 'product' || key === 'tokens' || key === 'components') continue;
+    if (key === 'project' || key === 'product' || key === 'design-units' || key === 'tokens' || key === 'components') continue;
     if (!key.startsWith('screen:') || key.length === 'screen:'.length) {
       throw new DesignMarkdownError(`Unknown design.md section: ${key}.`, 'DESIGN_MARKDOWN_UNKNOWN_SECTION');
     }
@@ -91,9 +95,10 @@ export function parseDesignMarkdown(markdown) {
   screens.sort((left, right) => String(left.id).localeCompare(String(right.id)));
 
   return {
-    schemaVersion: FORMAT_VERSION,
+    schemaVersion: parsedFormatVersion,
     project: sections.get('project'),
     product: sections.get('product') ?? null,
+    designUnits: sections.get('design-units') ?? null,
     tokens: sections.get('tokens'),
     components: sections.get('components'),
     screens,

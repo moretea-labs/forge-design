@@ -177,11 +177,11 @@ Before a meaningful redesign, Forge Design should be able to represent a compact
 - Non-goals and preserved semantics
 - Review evidence
 
-This brief is now repository-native structured state in `.design-harness/product.json`. The Product workspace is the default Forge Design entrypoint; screens and visual assets are downstream views of that contract.
+For self-contained projects, this brief is repository-native structured state in `.design-harness/product.json`. Larger products may keep a mature Product Contract elsewhere in the target repository; `.design-harness/design-units.json` then pins exact revision/path references and acts as the design projection boundary. Screens and visual assets remain downstream of whichever upstream product authority is explicitly referenced.
 
 ## Repository-native Product Contract
 
-`product.json` makes the upstream design decisions first-class and Git-reviewable. It contains:
+`product.json` makes embedded upstream design decisions first-class and Git-reviewable. It must not replace an already-authoritative external Product Contract merely to satisfy the design tool. It contains:
 
 - Product Brief status (`draft` / `ready`) and User Job;
 - product goal, primary/secondary tasks, business and preserved semantics;

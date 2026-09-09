@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "units": [
+    {
+      "id": "practice-core",
+      "name": "Practice Core",
+      "screenFamily": "focused practice dashboard",
+      "screenIds": ["metronome-home", "empty-state"],
+      "contractRefs": []
+    }
+  ]
+}

@@ -68,6 +68,50 @@ describe('ProjectStore creation semantics', () => {
 });
 
 
+describe('ProjectStore storage migration and design units', () => {
+  it('initializes storageVersion 1.1.0 with canonical design units', async () => {
+    const { store, projectRoot } = await createFixture();
+    expect((await store.getManifest('fixture')).storageVersion).toBe('1.1.0');
+    const units = await store.getDesignUnits('fixture');
+    expect(units.units).toEqual([expect.objectContaining({ id: 'primary', screenIds: ['home'] })]);
+    const persisted = JSON.parse(await readFile(join(projectRoot, '.design-harness', 'design-units.json'), 'utf8'));
+    expect(persisted).toEqual(units);
+  });
+
+  it('reads storageVersion 1.0.0 without mutating it, then migrates explicitly', async () => {
+    const { store, projectRoot } = await createFixture();
+    const harness = join(projectRoot, '.design-harness');
+    const manifestPath = join(harness, 'project.json');
+    const designUnitsPath = join(harness, 'design-units.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest.storageVersion = '1.0.0';
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+    await rm(designUnitsPath);
+
+    const context = await store.getContext('fixture');
+    expect(context.storage).toMatchObject({ storageVersion: '1.0.0', currentStorageVersion: '1.1.0', migrationRequired: true });
+    expect(context.designUnits.units[0]).toMatchObject({ id: 'legacy-default', screenIds: ['home'] });
+    await expect(readFile(designUnitsPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(store.putDesignUnits('fixture', context.designUnits)).rejects.toMatchObject({ code: 'STORAGE_MIGRATION_REQUIRED' });
+
+    const migration = await store.migrateProjectStorage('fixture');
+    expect(migration).toMatchObject({ changed: true, fromVersion: '1.0.0', toVersion: '1.1.0' });
+    expect((await store.getManifest('fixture')).storageVersion).toBe('1.1.0');
+    expect(JSON.parse(await readFile(designUnitsPath, 'utf8'))).toEqual(context.designUnits);
+    expect((await store.getContext('fixture')).storage.migrationRequired).toBe(false);
+  });
+
+  it('reports design units that reference unknown screens', async () => {
+    const { store } = await createFixture();
+    const units = await store.getDesignUnits('fixture');
+    units.units[0].screenIds.push('missing-screen');
+    await store.putDesignUnits('fixture', units);
+    const validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.join(' ')).toContain('references unknown screen missing-screen');
+  });
+});
+
 describe('ProjectStore initialization safety', () => {
   it('publishes one complete storage directory without leaving temporary siblings', async () => {
     const { projectRoot, store } = await createFixture();
@@ -206,14 +250,16 @@ describe('ProjectStore design.md transport', () => {
   it('round-trips the canonical Design Model through deterministic Markdown and imports validated edits', async () => {
     const { store } = await createFixture();
     const exported = await store.exportDesignMarkdown('fixture');
-    expect(exported).toContain('<!-- design-harness-format:1 -->');
+    expect(exported).toContain('<!-- design-harness-format:2 -->');
     expect(exported).toContain('```json design-harness:project');
     expect(exported).toContain('```json design-harness:product');
+    expect(exported).toContain('```json design-harness:design-units');
     expect(exported).toContain('```json design-harness:screen:home');
 
     const bundle = parseDesignMarkdown(exported);
     bundle.project.designSystem.version = '0.2.0';
     bundle.product.brief.productGoal = 'Edited through deterministic design.md transport.';
+    bundle.designUnits.units[0].name = 'Edited Design Unit';
     bundle.tokens.meta.version = '0.2.0';
     const edited = renderDesignMarkdown(bundle);
     const result = await store.importDesignMarkdown('fixture', edited);
@@ -222,7 +268,21 @@ describe('ProjectStore design.md transport', () => {
     expect((await store.getManifest('fixture')).designSystem.version).toBe('0.2.0');
     expect((await store.getTokens('fixture')).meta.version).toBe('0.2.0');
     expect((await store.getProductModel('fixture')).brief.productGoal).toContain('Edited through deterministic');
+    expect((await store.getDesignUnits('fixture')).units[0].name).toBe('Edited Design Unit');
     expect(await store.exportDesignMarkdown('fixture')).toBe(edited);
+  });
+
+  it('parses legacy format v1 without design-units and preserves current design units on import', async () => {
+    const { store } = await createFixture();
+    const beforeUnits = await store.getDesignUnits('fixture');
+    let legacy = await store.exportDesignMarkdown('fixture');
+    legacy = legacy.replace('<!-- design-harness-format:2 -->', '<!-- design-harness-format:1 -->');
+    legacy = legacy.replace(/\n## Design Units\n\n```json design-harness:design-units\n[\s\S]*?\n```/, '');
+    const parsed = parseDesignMarkdown(legacy);
+    expect(parsed.schemaVersion).toBe(1);
+    expect(parsed.designUnits).toBeNull();
+    await store.importDesignMarkdown('fixture', legacy);
+    expect(await store.getDesignUnits('fixture')).toEqual(beforeUnits);
   });
 
   it('fails before persistence when design.md attempts to change project identity', async () => {

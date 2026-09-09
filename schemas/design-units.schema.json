@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.moretea-labs.dev/design/design-units.schema.json",
+  "title": "Forge Design design units",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "units"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "screenFamily", "screenIds", "contractRefs"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+          "name": { "type": "string", "minLength": 1 },
+          "screenFamily": { "type": "string", "minLength": 1 },
+          "screenIds": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" }
+          },
+          "contractRefs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["revision", "path"],
+              "properties": {
+                "revision": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
+                "path": { "type": "string", "minLength": 1 },
+                "section": { "type": "string", "minLength": 1 },
+                "anchor": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

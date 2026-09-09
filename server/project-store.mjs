@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { basename, delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DesignMarkdownError, parseDesignMarkdown, renderDesignMarkdown } from './design-markdown.mjs';
+import { SchemaValidationError, loadCanonicalSchema, validateCanonicalDocument } from './schema-validator.mjs';
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 export const repositoryRoot = resolve(moduleDirectory, '..');
@@ -36,173 +37,70 @@ function assertString(value, label) {
   assert(typeof value === 'string' && value.trim().length > 0, `${label} must be a non-empty string.`);
 }
 
+const storageVersionSchema = loadCanonicalSchema('project').properties.storageVersion;
+export const supportedStorageVersions = Object.freeze([...storageVersionSchema.enum]);
+export const currentStorageVersion = supportedStorageVersions.at(-1);
+
+function validateSchema(schemaName, document) {
+  try {
+    return validateCanonicalDocument(schemaName, document);
+  } catch (error) {
+    if (error instanceof SchemaValidationError) {
+      throw new DesignStoreError(error.message, 400, error.code);
+    }
+    throw error;
+  }
+}
+
 export function validateProjectManifest(document) {
-  assert(isObject(document), 'project.json must contain an object.');
-  assert(document.schemaVersion === 1, 'project.json schemaVersion must be 1.');
-  assertSafeId(document.id, 'project id');
-  assertString(document.name, 'project name');
-  assertString(document.storageVersion, 'storageVersion');
-  assert(isObject(document.designSystem), 'designSystem must be an object.');
-  assertString(document.designSystem.name, 'designSystem.name');
-  assertString(document.designSystem.version, 'designSystem.version');
-  assertSafeId(document.activeScreenId, 'activeScreenId');
+  validateSchema('project', document);
+  assert(supportedStorageVersions.includes(document.storageVersion), `Unsupported storageVersion: ${document.storageVersion}.`, 'STORAGE_VERSION_UNSUPPORTED');
   return document;
 }
 
 export function validateTokens(document) {
-  assert(isObject(document), 'tokens.json must contain an object.');
-  assert(document.schemaVersion === 1, 'tokens.json schemaVersion must be 1.');
-  assert(isObject(document.meta), 'tokens.meta must be an object.');
-  assertString(document.meta.name, 'tokens.meta.name');
-  assertString(document.meta.version, 'tokens.meta.version');
-  for (const group of ['color', 'spacing', 'radius', 'shadow', 'typography', 'device']) {
-    assert(isObject(document[group]), `tokens.${group} must be an object.`);
-  }
-  assert(Object.keys(document.color).length > 0, 'tokens.color cannot be empty.');
-  for (const [name, value] of Object.entries(document.color)) assertString(value, `tokens.color.${name}`);
-  for (const group of ['spacing', 'radius']) {
-    for (const [name, value] of Object.entries(document[group])) {
-      assert(typeof value === 'number' && Number.isFinite(value) && value >= 0, `tokens.${group}.${name} must be a non-negative number.`);
-    }
-  }
-  for (const [name, value] of Object.entries(document.shadow)) assert(typeof value === 'string', `tokens.shadow.${name} must be a string.`);
-  for (const [name, style] of Object.entries(document.typography)) {
-    assert(isObject(style), `tokens.typography.${name} must be an object.`);
-    for (const key of ['size', 'lineHeight', 'weight']) {
-      assert(typeof style[key] === 'number' && Number.isFinite(style[key]) && style[key] > 0, `tokens.typography.${name}.${key} must be a positive number.`);
-    }
-  }
-  for (const key of ['iphoneWidth', 'iphoneHeight', 'safeTop', 'safeBottom']) {
-    const value = document.device[key];
-    assert(typeof value === 'number' && Number.isFinite(value) && value >= 0, `tokens.device.${key} must be a non-negative number.`);
-  }
-  assert(document.device.iphoneWidth > 0 && document.device.iphoneHeight > 0, 'Device width and height must be positive.');
-  return document;
+  return validateSchema('tokens', document);
 }
 
 export function validateComponents(document) {
-  assert(isObject(document), 'components.json must contain an object.');
-  assert(document.schemaVersion === 1, 'components.json schemaVersion must be 1.');
-  assert(Array.isArray(document.components), 'components must be an array.');
+  validateSchema('components', document);
   const names = new Set();
   for (const component of document.components) {
-    assert(isObject(component), 'Every component contract must be an object.');
-    assert(typeof component.name === 'string' && /^[A-Z][A-Za-z0-9]*$/.test(component.name), `Invalid component name: ${component.name}.`);
-    assert(!names.has(component.name), `Duplicate component contract: ${component.name}.`);
+    assert(!names.has(component.name), `Duplicate component contract: ${component.name}.`, 'DUPLICATE_COMPONENT_NAME');
     names.add(component.name);
-    assertString(component.purpose, `${component.name}.purpose`);
-    assert(Array.isArray(component.allowedProps) && component.allowedProps.every((item) => typeof item === 'string' && item.trim().length > 0), `${component.name}.allowedProps must be a non-empty string array.`);
-    assert(new Set(component.allowedProps).size === component.allowedProps.length, `${component.name}.allowedProps contains duplicates.`);
-    assert(['layout', 'content', 'control', 'navigation'].includes(component.category), `${component.name}.category is invalid.`);
   }
   return document;
 }
 
 export function validateScreen(document, expectedId) {
-  assert(isObject(document), 'Screen document must contain an object.');
-  assert(document.schemaVersion === 1, 'Screen schemaVersion must be 1.');
-  assertSafeId(document.id, 'screen id');
+  validateSchema('screen', document);
   if (expectedId !== undefined) assert(document.id === expectedId, `Screen filename/id mismatch: expected ${expectedId}, received ${document.id}.`, 'SCREEN_ID_MISMATCH');
-  assertString(document.name, 'screen name');
-  assert(document.device === 'iphone-16-pro', 'screen.device must be iphone-16-pro.');
-  assertString(document.goal, 'screen goal');
-  assertString(document.primaryAction, 'screen primaryAction');
-  assert(Array.isArray(document.constraints) && document.constraints.every((item) => typeof item === 'string'), 'screen.constraints must be a string array.');
-  assert(Array.isArray(document.nodes), 'screen.nodes must be an array.');
   const nodeIds = new Set();
   for (const node of document.nodes) {
-    assert(isObject(node), 'Every screen node must be an object.');
-    assertSafeId(node.id, 'screen node id');
     assert(!nodeIds.has(node.id), `Duplicate screen node id: ${node.id}.`, 'DUPLICATE_NODE_ID');
     nodeIds.add(node.id);
-    assertString(node.component, `${node.id}.component`);
-    if (node.props !== undefined) assert(isObject(node.props), `${node.id}.props must be an object.`);
   }
   return document;
-}
-
-const productReviewStages = ['not_started', 'captured', 'model_visible', 'visual_reviewed'];
-const productInformationRoles = ['identity', 'primary_meaning', 'evidence', 'action', 'status', 'next_action', 'context', 'supporting_metadata'];
-const productPriorities = ['primary', 'secondary', 'supporting'];
-
-function assertStringArray(value, label) {
-  assert(Array.isArray(value) && value.every((item) => typeof item === 'string'), `${label} must be a string array.`);
 }
 
 function assertUniqueIds(items, label) {
   const ids = new Set();
   for (const item of items) {
-    assert(isObject(item), `${label} entries must be objects.`);
-    assertSafeId(item.id, `${label} id`);
     assert(!ids.has(item.id), `Duplicate ${label} id: ${item.id}.`, 'DUPLICATE_PRODUCT_ID');
     ids.add(item.id);
   }
 }
 
 export function validateProductModel(document) {
-  assert(isObject(document), 'product.json must contain an object.');
-  assert(document.schemaVersion === 1, 'product.json schemaVersion must be 1.');
-  assert(isObject(document.brief), 'product.brief must be an object.');
-  assert(['draft', 'ready'].includes(document.brief.status), 'product.brief.status is invalid.');
-  assertString(document.brief.userJob, 'product.brief.userJob');
-  assertString(document.brief.productGoal, 'product.brief.productGoal');
-  for (const field of ['businessSemantics', 'primaryTasks', 'secondaryTasks', 'nonGoals', 'preservedSemantics']) {
-    assertStringArray(document.brief[field], `product.brief.${field}`);
-  }
-  assert(Array.isArray(document.brief.informationHierarchy), 'product.brief.informationHierarchy must be an array.');
-  for (const item of document.brief.informationHierarchy) {
-    assert(isObject(item), 'informationHierarchy entries must be objects.');
-    assert(productInformationRoles.includes(item.role), `Invalid information role: ${item.role}.`);
-    assertString(item.description, 'informationHierarchy.description');
-    assert(productPriorities.includes(item.priority), `Invalid information priority: ${item.priority}.`);
-  }
-  assert(Array.isArray(document.brief.stateModel), 'product.brief.stateModel must be an array.');
-  assertUniqueIds(document.brief.stateModel, 'state');
-  for (const item of document.brief.stateModel) {
-    assertString(item.meaning, `${item.id}.meaning`);
-    assertString(item.userImpact, `${item.id}.userImpact`);
-  }
-  assert(Array.isArray(document.brief.interactionModel), 'product.brief.interactionModel must be an array.');
-  assertUniqueIds(document.brief.interactionModel, 'interaction');
-  for (const item of document.brief.interactionModel) {
-    assertString(item.semantics, `${item.id}.semantics`);
-    if (item.patternId !== undefined) assertSafeId(item.patternId, `${item.id}.patternId`);
-  }
-  assertString(document.brief.screenFamily, 'product.brief.screenFamily');
+  validateSchema('product', document);
+  assertUniqueIds(document.flows, 'product flow');
+  assertUniqueIds(document.patterns, 'interaction pattern');
+  return document;
+}
 
-  assert(Array.isArray(document.flows), 'product.flows must be an array.');
-  assertUniqueIds(document.flows, 'flow');
-  for (const flow of document.flows) {
-    assertString(flow.name, `${flow.id}.name`);
-    assertString(flow.userJob, `${flow.id}.userJob`);
-    assert(Array.isArray(flow.screenIds), `${flow.id}.screenIds must be an array.`);
-    for (const screenId of flow.screenIds) assertSafeId(screenId, `${flow.id}.screenId`);
-    assert(['draft', 'candidate', 'validated'].includes(flow.status), `${flow.id}.status is invalid.`);
-  }
-
-  assert(Array.isArray(document.patterns), 'product.patterns must be an array.');
-  assertUniqueIds(document.patterns, 'pattern');
-  for (const pattern of document.patterns) {
-    assertString(pattern.name, `${pattern.id}.name`);
-    assertString(pattern.semanticPurpose, `${pattern.id}.semanticPurpose`);
-    assert(['local', 'golden_candidate', 'approved'].includes(pattern.status), `${pattern.id}.status is invalid.`);
-    assert(Array.isArray(pattern.validatedFlowIds), `${pattern.id}.validatedFlowIds must be an array.`);
-    for (const flowId of pattern.validatedFlowIds) assertSafeId(flowId, `${pattern.id}.validatedFlowId`);
-    assertStringArray(pattern.siblingEvidence, `${pattern.id}.siblingEvidence`);
-    if (pattern.owner !== undefined) assertString(pattern.owner, `${pattern.id}.owner`);
-  }
-
-  assert(isObject(document.golden), 'product.golden must be an object.');
-  assert(['draft', 'candidate', 'approved'].includes(document.golden.status), 'product.golden.status is invalid.');
-  for (const field of ['screenIds', 'flowIds', 'patternIds']) {
-    assert(Array.isArray(document.golden[field]), `product.golden.${field} must be an array.`);
-    for (const value of document.golden[field]) assertSafeId(value, `product.golden.${field}`);
-  }
-  assert(isObject(document.golden.review), 'product.golden.review must be an object.');
-  assert(productReviewStages.includes(document.golden.review.stage), 'product.golden.review.stage is invalid.');
-  assert(['pending', 'accepted', 'rejected'].includes(document.golden.review.userDecision), 'product.golden.review.userDecision is invalid.');
-  assertStringArray(document.golden.review.artifactRefs, 'product.golden.review.artifactRefs');
-  assertStringArray(document.golden.review.notes, 'product.golden.review.notes');
+export function validateDesignUnits(document) {
+  validateSchema('design-units', document);
+  assertUniqueIds(document.units, 'design unit');
   return document;
 }
 
@@ -432,6 +330,7 @@ export class ProjectStore {
       components: join(project.storagePath, 'components.json'),
       screens: join(project.storagePath, 'screens'),
       product: join(project.storagePath, 'product.json'),
+      designUnits: join(project.storagePath, 'design-units.json'),
     };
   }
 
@@ -471,6 +370,52 @@ export class ProjectStore {
     const project = await this.resolveProject(projectId);
     await writeJsonAtomic(join(project.storagePath, 'product.json'), document);
     return structuredClone(document);
+  }
+
+  async getDesignUnits(projectId) {
+    const project = await this.resolveProject(projectId);
+    const path = join(project.storagePath, 'design-units.json');
+    if (await pathExists(path)) return validateDesignUnits(await readJson(path));
+    if (project.manifest.storageVersion !== '1.0.0') {
+      throw new DesignStoreError('design-units.json is required for storageVersion 1.1.0.', 400, 'DESIGN_UNITS_MISSING');
+    }
+    const [screens, product] = await Promise.all([this.listScreens(projectId), this.getProductModel(projectId)]);
+    return validateDesignUnits({
+      schemaVersion: 1,
+      units: [{
+        id: 'legacy-default',
+        name: `${project.manifest.name} Legacy Design`,
+        screenFamily: product?.brief?.screenFamily || 'unclassified',
+        screenIds: screens.map((screen) => screen.id).sort(),
+        contractRefs: [],
+      }],
+    });
+  }
+
+  async putDesignUnits(projectId, document) {
+    validateDesignUnits(document);
+    const project = await this.resolveProject(projectId);
+    if (project.manifest.storageVersion !== currentStorageVersion) {
+      throw new DesignStoreError(`Project ${projectId} uses storageVersion ${project.manifest.storageVersion}; migrate to ${currentStorageVersion} before writing design units.`, 409, 'STORAGE_MIGRATION_REQUIRED');
+    }
+    await writeJsonAtomic(join(project.storagePath, 'design-units.json'), document);
+    return structuredClone(document);
+  }
+
+  async migrateProjectStorage(projectId) {
+    const project = await this.resolveProject(projectId);
+    if (project.manifest.storageVersion === currentStorageVersion) {
+      return { projectId, fromVersion: currentStorageVersion, toVersion: currentStorageVersion, changed: false };
+    }
+    if (project.manifest.storageVersion !== '1.0.0') {
+      throw new DesignStoreError(`Unsupported migration from ${project.manifest.storageVersion}.`, 400, 'STORAGE_MIGRATION_UNSUPPORTED');
+    }
+    const designUnits = await this.getDesignUnits(projectId);
+    await writeJsonAtomic(join(project.storagePath, 'design-units.json'), designUnits);
+    const nextManifest = { ...project.manifest, storageVersion: currentStorageVersion };
+    validateProjectManifest(nextManifest);
+    await writeJsonAtomic(join(project.storagePath, 'project.json'), nextManifest);
+    return { projectId, fromVersion: '1.0.0', toVersion: currentStorageVersion, changed: true, designUnits };
   }
 
   async listScreens(projectId) {
@@ -515,11 +460,12 @@ export class ProjectStore {
 
   async getContext(projectId) {
     const project = await this.resolveProject(projectId);
-    const [tokens, components, screens, product] = await Promise.all([
+    const [tokens, components, screens, product, designUnits] = await Promise.all([
       this.getTokens(projectId),
       this.getComponents(projectId),
       this.listScreens(projectId),
       this.getProductModel(projectId),
+      this.getDesignUnits(projectId),
     ]);
     return {
       schemaVersion: 1,
@@ -530,11 +476,15 @@ export class ProjectStore {
         versionControl: 'git',
         screenLayout: 'one-json-file-per-screen',
         browserStorageCanonical: false,
+        storageVersion: project.manifest.storageVersion,
+        currentStorageVersion,
+        migrationRequired: project.manifest.storageVersion !== currentStorageVersion,
       },
       tokens,
       components,
       screens,
       product,
+      designUnits,
       goldenGate: evaluateGoldenGate(product, screens),
     };
   }
@@ -559,9 +509,14 @@ export class ProjectStore {
     const tokens = validateTokens(bundle.tokens);
     const components = validateComponents(bundle.components);
     const product = bundle.product == null ? null : validateProductModel(bundle.product);
+    const importedDesignUnits = bundle.designUnits == null ? null : validateDesignUnits(bundle.designUnits);
     const importedScreens = bundle.screens.map((screen) => validateScreen(screen, screen.id));
     const project = await this.resolveProject(projectId);
+    if (project.manifest.storageVersion === currentStorageVersion && manifest.storageVersion === '1.0.0') {
+      throw new DesignStoreError('design.md cannot downgrade a project from storageVersion 1.1.0 to 1.0.0.', 409, 'DESIGN_MARKDOWN_STORAGE_DOWNGRADE');
+    }
     const currentScreens = await this.listScreens(projectId);
+    const designUnits = importedDesignUnits ?? await this.getDesignUnits(projectId);
     const mergedScreens = new Map(currentScreens.map((screen) => [screen.id, screen]));
     for (const screen of importedScreens) mergedScreens.set(screen.id, screen);
 
@@ -578,11 +533,18 @@ export class ProjectStore {
     }
     const productErrors = productReferenceErrors(product, [...mergedScreens.values()]);
     if (productErrors.length) throw new DesignStoreError(productErrors[0], 400, 'DESIGN_MARKDOWN_PRODUCT_REFERENCE_INVALID');
+    const mergedScreenIds = new Set(mergedScreens.keys());
+    for (const unit of designUnits.units) {
+      for (const screenId of unit.screenIds) {
+        if (!mergedScreenIds.has(screenId)) throw new DesignStoreError(`Design unit ${unit.id} references unknown screen ${screenId}.`, 400, 'DESIGN_MARKDOWN_DESIGN_UNIT_REFERENCE_INVALID');
+      }
+    }
 
     await writeJsonAtomic(join(project.storagePath, 'project.json'), manifest);
     await writeJsonAtomic(join(project.storagePath, 'tokens.json'), tokens);
     await writeJsonAtomic(join(project.storagePath, 'components.json'), components);
     if (product) await writeJsonAtomic(join(project.storagePath, 'product.json'), product);
+    if (importedDesignUnits) await writeJsonAtomic(join(project.storagePath, 'design-units.json'), designUnits);
     for (const screen of importedScreens) {
       await writeJsonAtomic(join(project.storagePath, 'screens', `${screen.id}.json`), screen);
     }
@@ -610,6 +572,17 @@ export class ProjectStore {
         if (!componentNames.has(node.component)) errors.push(`${screen.id}/${node.id} uses unregistered component ${node.component}.`);
       }
     }
+    if (context.storage.migrationRequired) {
+      warnings.push(`storageVersion ${context.storage.storageVersion} is readable compatibility state; migrate to ${context.storage.currentStorageVersion} before design-unit writes.`);
+    }
+    const assignedScreens = new Set();
+    for (const unit of context.designUnits.units) {
+      for (const screenId of unit.screenIds) {
+        if (!screenIds.has(screenId)) errors.push(`Design unit ${unit.id} references unknown screen ${screenId}.`);
+        assignedScreens.add(screenId);
+      }
+    }
+    for (const screenId of screenIds) if (!assignedScreens.has(screenId)) warnings.push(`Screen ${screenId} is not assigned to a design unit.`);
     if (!context.product) {
       warnings.push('product.json is missing; this project is legacy visual-only and cannot be promoted to Golden.');
     } else {
@@ -631,7 +604,7 @@ export class ProjectStore {
       schemaVersion: 1,
       id,
       name,
-      storageVersion: '1.0.0',
+      storageVersion: currentStorageVersion,
       designSystem: { name: `${name} Design System`, version: '0.1.0' },
       activeScreenId: 'home',
     };
@@ -684,6 +657,13 @@ export class ProjectStore {
       { name: 'EmptyState', purpose: 'Explain an empty canvas and the next valid action.', allowedProps: ['title', 'body'], category: 'content' },
       { name: 'PrimaryAction', purpose: 'Exactly one dominant screen action.', allowedProps: ['label', 'activeLabel'], category: 'control' },
     ] };
+    const designUnits = { schemaVersion: 1, units: [{
+      id: 'primary',
+      name: `${name} Primary Design`,
+      screenFamily: 'unclassified',
+      screenIds: ['home'],
+      contractRefs: [],
+    }] };
     const screen = { schemaVersion: 1, id: 'home', name: 'Home', device: 'iphone-16-pro', goal: 'Define the first screen goal.', primaryAction: 'continue', constraints: ['Use registered components and project tokens only.'], nodes: [
       { id: 'header', component: 'ScreenHeader', props: { eyebrow: 'New project', title: name } },
       { id: 'empty', component: 'EmptyState', props: { title: 'Start with a Product Contract', body: 'Define the User Job, full flow, information hierarchy, and interaction semantics before composing screens.' } },
@@ -693,6 +673,7 @@ export class ProjectStore {
     validateTokens(tokens);
     validateComponents(components);
     validateProductModel(product);
+    validateDesignUnits(designUnits);
     validateScreen(screen, 'home');
     const temporaryStoragePath = join(root, `.design-harness-${randomUUID()}.tmp`);
     await mkdir(root, { recursive: true });
@@ -701,6 +682,7 @@ export class ProjectStore {
       await writeJsonAtomic(join(temporaryStoragePath, 'tokens.json'), tokens);
       await writeJsonAtomic(join(temporaryStoragePath, 'components.json'), components);
       await writeJsonAtomic(join(temporaryStoragePath, 'product.json'), product);
+      await writeJsonAtomic(join(temporaryStoragePath, 'design-units.json'), designUnits);
       await writeJsonAtomic(join(temporaryStoragePath, 'screens', 'home.json'), screen);
       await writeFile(join(temporaryStoragePath, 'README.md'), '# `.design-harness`\n\nCanonical Git-tracked design assets for this repository.\n', 'utf8');
       await rename(temporaryStoragePath, storagePath);
