@@ -22,7 +22,7 @@ Forge Design does not own project design data. Each target repository owns one t
 - `.design-harness/product.json` is the repository-native embedded Product Design Model for projects that model product semantics inside Forge Design. It also continues to carry the existing project-wide Golden gate. For projects with an external mature Product Contract, pinned Design Unit references identify that upstream authority instead of replacing it.
 - `.design-harness/tokens.json` is the only design-token source of truth.
 - `.design-harness/components.json` is the component contract available to ChatGPT.
-- Each `screens/*.json` file is one independent artboard and reviewable Git artifact.
+- Each `screens/*.json` file is one independent Screen identity and reviewable Git artifact. A Screen may contain named state variants; variants do not become separate pseudo-screens just to capture empty/error/degraded/etc. states.
 - `project.json` is the stable discovery entrypoint and declares the storage version.
 - Browser memory may hold temporary editor state, but localStorage and IndexedDB are never canonical.
 - `design.md` is an import/export transport, not canonical storage. Export is deterministic; import validates all included documents before publishing included assets and merges screens without implicit deletion.

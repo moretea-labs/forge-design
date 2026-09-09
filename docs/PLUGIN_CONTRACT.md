@@ -11,7 +11,7 @@ Every target repository owns a tracked `.design-harness/` directory. The browser
 - `design-units.json`: multiple design families, their Screen Family/screen membership, and pinned upstream Product Contract references;
 - `tokens.json`: the only design-token source of truth;
 - `components.json`: component contracts ChatGPT may compose;
-- `screens/<screen-id>.json`: one independent screen/artboard per file.
+- `screens/<screen-id>.json`: one independent Screen identity per file, including its state variants when present.
 
 No browser database or generated source mirror is authoritative. `schemas/*.schema.json` is the one structural model authority; runtime validation and generated TypeScript document types consume that authority rather than redefining the persisted model.
 

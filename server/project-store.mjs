@@ -72,13 +72,34 @@ export function validateComponents(document) {
   return document;
 }
 
+function assertUniqueNodeIds(nodes, label = 'screen') {
+  const nodeIds = new Set();
+  for (const node of nodes) {
+    assert(!nodeIds.has(node.id), `Duplicate ${label} node id: ${node.id}.`, 'DUPLICATE_NODE_ID');
+    nodeIds.add(node.id);
+  }
+}
+
+function screenStateIds(screen) {
+  if (Array.isArray(screen.states) && screen.states.length > 0) return new Set(screen.states.map((state) => state.id));
+  return new Set(['normal']);
+}
+
 export function validateScreen(document, expectedId) {
   validateSchema('screen', document);
   if (expectedId !== undefined) assert(document.id === expectedId, `Screen filename/id mismatch: expected ${expectedId}, received ${document.id}.`, 'SCREEN_ID_MISMATCH');
-  const nodeIds = new Set();
-  for (const node of document.nodes) {
-    assert(!nodeIds.has(node.id), `Duplicate screen node id: ${node.id}.`, 'DUPLICATE_NODE_ID');
-    nodeIds.add(node.id);
+  assertUniqueNodeIds(document.nodes);
+  if (Array.isArray(document.states) && document.states.length > 0) {
+    assert(document.initialStateId, `Screen ${document.id} with state variants must declare initialStateId.`, 'SCREEN_INITIAL_STATE_REQUIRED');
+    const stateIds = new Set();
+    for (const state of document.states) {
+      assert(!stateIds.has(state.id), `Duplicate screen state id: ${state.id}.`, 'DUPLICATE_SCREEN_STATE_ID');
+      stateIds.add(state.id);
+      if (state.nodes) assertUniqueNodeIds(state.nodes, `screen state ${state.id}`);
+    }
+    assert(stateIds.has(document.initialStateId), `Screen ${document.id} initialStateId ${document.initialStateId} does not exist.`, 'SCREEN_INITIAL_STATE_MISSING');
+  } else if (document.initialStateId !== undefined) {
+    assert(document.initialStateId === 'normal', `Screen ${document.id} without variants may only use implicit initialStateId normal.`, 'SCREEN_INITIAL_STATE_INVALID');
   }
   return document;
 }
@@ -95,6 +116,9 @@ export function validateProductModel(document) {
   validateSchema('product', document);
   assertUniqueIds(document.flows, 'product flow');
   assertUniqueIds(document.patterns, 'interaction pattern');
+  for (const flow of document.flows) {
+    if (flow.transitions) assertUniqueIds(flow.transitions, `transition in flow ${flow.id}`);
+  }
   return document;
 }
 
@@ -133,7 +157,7 @@ function evaluateGoldenGate(product, screens = []) {
     && brief.screenFamily.trim()
   );
   const selectedFlows = product.golden.flowIds.map((id) => flows.get(id)).filter(Boolean);
-  const flowReady = selectedFlows.length === product.golden.flowIds.length && selectedFlows.length > 0 && selectedFlows.every((flow) => flow.screenIds.length > 0 && flow.screenIds.every((id) => screenIds.has(id)) && flow.status === 'validated');
+  const flowReady = selectedFlows.length === product.golden.flowIds.length && selectedFlows.length > 0 && selectedFlows.every((flow) => flow.screenIds.length > 0 && flow.screenIds.every((id) => screenIds.has(id)) && flow.status === 'validated' && flow.entry && Array.isArray(flow.transitions));
   const selectedPatterns = product.golden.patternIds.map((id) => patterns.get(id)).filter(Boolean);
   const interactionPatternsReady = selectedPatterns.length === product.golden.patternIds.length
     && selectedPatterns.every((pattern) => pattern.status === 'approved' && pattern.validatedFlowIds.length > 0 && pattern.siblingEvidence.length > 0);
@@ -144,7 +168,7 @@ function evaluateGoldenGate(product, screens = []) {
   const userAccepted = product.golden.review.userDecision === 'accepted';
   const blockers = [];
   if (!productContractReady) blockers.push('Product Contract is incomplete.');
-  if (!flowReady) blockers.push('Golden flow must reference validated screens and a validated full product flow.');
+  if (!flowReady) blockers.push('Golden flow must use a validated transition graph with an explicit entry state and valid screens.');
   if (product.golden.patternIds.length > 0 && !interactionPatternsReady) blockers.push('Interaction Patterns need validated flow and sibling evidence before system promotion.');
   if (!runtimeEvidenceReady) blockers.push('Runtime review stage requires at least one concrete artifact reference.');
   if (!visualReviewed) blockers.push(`Runtime review is only at ${product.golden.review.stage}; Captured is not Model Visible or Visual Reviewed.`);
@@ -166,11 +190,38 @@ function evaluateGoldenGate(product, screens = []) {
 
 function productReferenceErrors(product, screens) {
   if (!product) return [];
-  const screenIds = new Set(screens.map((screen) => screen.id));
+  const screenMap = new Map(screens.map((screen) => [screen.id, screen]));
+  const screenIds = new Set(screenMap.keys());
   const flowIds = new Set(product.flows.map((flow) => flow.id));
   const patternIds = new Set(product.patterns.map((pattern) => pattern.id));
+  const interactionIds = new Set(product.brief.interactionModel.map((interaction) => interaction.id));
   const errors = [];
-  for (const flow of product.flows) for (const screenId of flow.screenIds) if (!screenIds.has(screenId)) errors.push(`Product flow ${flow.id} references unknown screen ${screenId}.`);
+
+  const checkTarget = (flowId, label, target) => {
+    if (!target) return;
+    const screen = screenMap.get(target.screenId);
+    if (!screen) {
+      errors.push(`Product flow ${flowId} ${label} references unknown screen ${target.screenId}.`);
+      return;
+    }
+    if (target.stateId && !screenStateIds(screen).has(target.stateId)) {
+      errors.push(`Product flow ${flowId} ${label} references unknown state ${target.stateId} on screen ${target.screenId}.`);
+    }
+  };
+
+  for (const flow of product.flows) {
+    for (const screenId of flow.screenIds) if (!screenIds.has(screenId)) errors.push(`Product flow ${flow.id} references unknown screen ${screenId}.`);
+    if (flow.entry) {
+      checkTarget(flow.id, 'entry', flow.entry);
+      if (!flow.screenIds.includes(flow.entry.screenId)) errors.push(`Product flow ${flow.id} entry screen ${flow.entry.screenId} is not listed in screenIds.`);
+    }
+    for (const transition of flow.transitions ?? []) {
+      checkTarget(flow.id, `transition ${transition.id} source`, transition.from);
+      checkTarget(flow.id, `transition ${transition.id} destination`, transition.to);
+      if (!interactionIds.has(transition.trigger.interactionId)) errors.push(`Product flow ${flow.id} transition ${transition.id} references unknown interaction ${transition.trigger.interactionId}.`);
+      for (const recovery of transition.recovery ?? []) checkTarget(flow.id, `transition ${transition.id} recovery`, recovery.target);
+    }
+  }
   for (const interaction of product.brief.interactionModel) if (interaction.patternId && !patternIds.has(interaction.patternId)) errors.push(`Interaction ${interaction.id} references unknown pattern ${interaction.patternId}.`);
   for (const pattern of product.patterns) for (const flowId of pattern.validatedFlowIds) if (!flowIds.has(flowId)) errors.push(`Pattern ${pattern.id} references unknown validated flow ${flowId}.`);
   for (const screenId of product.golden.screenIds) if (!screenIds.has(screenId)) errors.push(`Golden references unknown screen ${screenId}.`);
@@ -641,7 +692,7 @@ export class ProjectStore {
         preservedSemantics: [],
       },
       flows: [
-        { id: 'primary-flow', name: 'Primary product flow', userJob: 'Define the end-to-end user job.', screenIds: ['home'], status: 'draft' },
+        { id: 'primary-flow', name: 'Primary product flow', userJob: 'Define the end-to-end user job.', screenIds: ['home'], entry: { screenId: 'home', stateId: 'normal' }, transitions: [], status: 'draft' },
       ],
       patterns: [],
       golden: {

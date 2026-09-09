@@ -73,7 +73,53 @@
       "screenIds": [
         "metronome-home"
       ],
-      "status": "candidate"
+      "status": "candidate",
+      "entry": {
+        "screenId": "metronome-home",
+        "stateId": "idle"
+      },
+      "transitions": [
+        {
+          "id": "start-practice",
+          "from": {
+            "screenId": "metronome-home",
+            "stateId": "idle"
+          },
+          "trigger": {
+            "interactionId": "start-practice",
+            "event": "start"
+          },
+          "commitBoundary": {
+            "kind": "local_state",
+            "description": "示例练习状态仅在当前交互会话切换"
+          },
+          "result": "练习进入运行中状态",
+          "to": {
+            "screenId": "metronome-home",
+            "stateId": "running"
+          }
+        },
+        {
+          "id": "stop-practice",
+          "from": {
+            "screenId": "metronome-home",
+            "stateId": "running"
+          },
+          "trigger": {
+            "interactionId": "start-practice",
+            "event": "stop"
+          },
+          "commitBoundary": {
+            "kind": "local_state",
+            "description": "停止示例练习并回到可编辑状态"
+          },
+          "result": "练习停止并回到待开始状态",
+          "to": {
+            "screenId": "metronome-home",
+            "stateId": "idle"
+          }
+        }
+      ]
     }
   ],
   "patterns": [

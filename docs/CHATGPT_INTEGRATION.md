@@ -11,10 +11,11 @@ Before composing UI, follow the product-design workflow in [`PRODUCT_DESIGN_WORK
 2. Read one deterministic context with `npm run --silent design -- context --project <id>` or `GET /api/design/projects/<id>/context`. Inspect `designUnits` before choosing a screen to edit.
 3. For each Design Unit, resolve its pinned `contractRefs` from the target repository at the exact referenced revision/path/section. Those upstream contracts remain semantic authority. Do not copy a mature external Product Contract into Forge Design simply to make the design workspace self-contained.
 4. If the project uses the embedded `product.json`, read it as the Product Design Model and establish User Job, journey, information/state/interaction model, Screen Family and system patterns before composition. A missing embedded product model remains legacy/unmodeled for the existing project-wide Golden gate.
-5. Use approved Screen Family references and system interaction contracts first; only then use returned component contracts and tokens to implement or revise a Screen Spec.
-6. For portable batch editing, export `design.md` with `npm run --silent design -- export-design-md --project <id> --file /tmp/design.md`. Format v2 includes Design Units; format v1 remains readable for backward compatibility.
-7. Import an edited Markdown transport with `npm run --silent design -- import-design-md --project <id> --file /tmp/design.md` or `PUT /api/design/projects/<id>/design.md` using `text/markdown`.
-8. Render and review the real design screen and relevant interaction path, validate sibling consistency, then validate the project and review the resulting granular JSON Git diff.
+5. Read each relevant Screen as one identity with named state variants. Then read the Product Flow transition graph: `entry`, `from`, `trigger`, optional `guard`, `commitBoundary`, `result`, `to`, and `recovery`. Do not infer a user journey from component-node order, and do not create separate pseudo-screens for ordinary empty/error/degraded states.
+6. Use approved Screen Family references and system interaction contracts first; only then use returned component contracts and tokens to implement or revise a Screen Spec.
+7. For portable batch editing, export `design.md` with `npm run --silent design -- export-design-md --project <id> --file /tmp/design.md`. Format v2 includes Design Units; format v1 remains readable for backward compatibility.
+8. Import an edited Markdown transport with `npm run --silent design -- import-design-md --project <id> --file /tmp/design.md` or `PUT /api/design/projects/<id>/design.md` using `text/markdown`.
+9. Render and review the real design screen states and relevant transition paths, validate sibling consistency, then validate the project and review the resulting granular JSON Git diff.
 
 The context payload contains manifest/storage migration state, Design Units, embedded Product Design Model, computed Golden Gate, tokens, components, and independent screens. It is transport-independent and intentionally contains no browser-only state.
 

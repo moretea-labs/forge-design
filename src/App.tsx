@@ -30,6 +30,7 @@ import type {
   ProductDesignModel,
   ScreenSpec,
 } from './core/schema';
+import { initialScreenStateId, resolveScreenState, screenStateIds } from './core/schema';
 import { installTokenVariables } from './design-system/tokens';
 import { MockScreen } from './components/MockScreen';
 import { ProductWorkspace } from './components/ProductWorkspace';
@@ -57,7 +58,7 @@ function productScaffold(context: DesignProjectContext): ProductDesignModel {
       nonGoals: [],
       preservedSemantics: [],
     },
-    flows: [{ id: 'primary-flow', name: 'Primary product flow', userJob: 'Define the end-to-end user job.', screenIds: [context.project.activeScreenId], status: 'draft' }],
+    flows: [{ id: 'primary-flow', name: 'Primary product flow', userJob: 'Define the end-to-end user job.', screenIds: [context.project.activeScreenId], entry: { screenId: context.project.activeScreenId, stateId: initialScreenStateId(context.screens.find((screen) => screen.id === context.project.activeScreenId) ?? context.screens[0]) }, transitions: [], status: 'draft' }],
     patterns: [],
     golden: { status: 'draft', screenIds: [context.project.activeScreenId], flowIds: ['primary-flow'], patternIds: [], review: { stage: 'not_started', userDecision: 'pending', artifactRefs: [], notes: [] } },
   };
@@ -109,6 +110,7 @@ export default function App(): ReactElement {
   const [context, setContext] = useState<DesignProjectContext | null>(null);
   const [paths, setPaths] = useState<DesignProjectPaths | null>(null);
   const [selectedId, setSelectedId] = useState('');
+  const [activeStateId, setActiveStateId] = useState('normal');
   const [selectedComponentName, setSelectedComponentName] = useState('');
   const [view, setView] = useState<WorkspaceView>('product');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect');
@@ -118,9 +120,15 @@ export default function App(): ReactElement {
   const [notice, setNotice] = useState<Notice>(null);
 
   const selected = context?.screens.find((screen) => screen.id === selectedId) ?? context?.screens[0] ?? null;
+  const selectedStateIds = selected ? screenStateIds(selected) : [];
+  const resolvedSelected = selected ? resolveScreenState(selected, activeStateId) : null;
   const contracts = context?.components.components ?? [];
   const selectedComponent = contracts.find((component) => component.name === selectedComponentName) ?? contracts[0] ?? null;
-  const issues = useMemo(() => selected && context ? lintScreen(selected, context.components) : [], [selected, context]);
+  const issues = useMemo(() => resolvedSelected && context ? lintScreen(resolvedSelected, context.components) : [], [resolvedSelected, context]);
+  const selectedFlows = useMemo(() => {
+    if (!context?.product || !selected) return [];
+    return context.product.flows.filter((flow) => flow.screenIds.includes(selected.id) || flow.entry?.screenId === selected.id || (flow.transitions ?? []).some((transition) => transition.from.screenId === selected.id || transition.to.screenId === selected.id || (transition.recovery ?? []).some((item) => item.target.screenId === selected.id)));
+  }, [context, selected]);
 
   const loadProject = useCallback(async (nextProjectId: string, preferredScreenId?: string) => {
     setBusy(true);
@@ -138,6 +146,8 @@ export default function App(): ReactElement {
         ? preferredScreenId
         : nextContext.project.activeScreenId;
       setSelectedId(nextScreenId);
+      const nextScreen = nextContext.screens.find((screen) => screen.id === nextScreenId) ?? nextContext.screens[0];
+      if (nextScreen) setActiveStateId(initialScreenStateId(nextScreen));
       setSelectedComponentName((current) => nextContext.components.components.some((component) => component.name === current)
         ? current
         : nextContext.components.components[0]?.name ?? '');
@@ -172,6 +182,12 @@ export default function App(): ReactElement {
       }
     })();
   }, [loadProject]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const availableStates = screenStateIds(selected);
+    if (!availableStates.includes(activeStateId)) setActiveStateId(initialScreenStateId(selected));
+  }, [selected, activeStateId]);
 
   useEffect(() => {
     if (!context) return;
@@ -262,7 +278,7 @@ export default function App(): ReactElement {
       <div className="sidebar-section-title"><span>项目画板</span><button aria-label="新建画板" onClick={() => void createScreen()} disabled={busy}><Plus size={17} /></button></div>
       <div className="screen-list">
         {context.screens.map((screen) => (
-          <button key={screen.id} className={screen.id === selected?.id ? 'selected' : ''} onClick={() => setSelectedId(screen.id)}>
+          <button key={screen.id} className={screen.id === selected?.id ? 'selected' : ''} onClick={() => { setSelectedId(screen.id); setActiveStateId(initialScreenStateId(screen)); }}>
             <span className="mini-device"><span /></span><span><strong>{screen.name}</strong><small>{screen.id}</small></span>
           </button>
         ))}
@@ -326,20 +342,32 @@ export default function App(): ReactElement {
       return <section className="inspector-section inspector-editor"><div className="inspector-title"><FileCode2 size={16} /><strong>Screen Spec</strong><span>JSON</span></div><AssetEditor value={editorText} onChange={setEditorText} onSave={() => void saveEditor()} onReload={() => setEditorText(json(selected))} busy={busy} /></section>;
     }
     if (inspectorTab === 'flow') {
+      const transitionCount = selectedFlows.reduce((count, flow) => count + (flow.transitions?.length ?? 0), 0);
       return (
         <section className="inspector-section flow-panel">
-          <div className="inspector-title"><GitBranch size={16} /><strong>交互流</strong><span>{selected.nodes.length}</span></div>
-          <div className="flow-start">进入 · {selected.name}</div>
-          {selected.nodes.map((node) => <div className="flow-node" key={node.id}><span>{node.component}</span><small>{node.id}</small></div>)}
-          <div className="flow-primary">Primary → {selected.primaryAction}</div>
+          <div className="inspector-title"><GitBranch size={16} /><strong>Product Flow</strong><span>{transitionCount}</span></div>
+          {selectedFlows.length === 0 ? <div className="flow-start">当前页面尚未关联 Product Flow</div> : selectedFlows.map((flow) => (
+            <div key={flow.id}>
+              <div className="flow-start">{flow.name} · {flow.entry ? `${flow.entry.screenId}${flow.entry.stateId ? ` / ${flow.entry.stateId}` : ''}` : 'legacy entry missing'}</div>
+              {(flow.transitions ?? []).map((transition) => (
+                <div className="flow-node" key={transition.id}>
+                  <span>{transition.from.screenId}{transition.from.stateId ? ` / ${transition.from.stateId}` : ''} → {transition.to.screenId}{transition.to.stateId ? ` / ${transition.to.stateId}` : ''}</span>
+                  <small>{transition.trigger.interactionId}{transition.trigger.event ? ` · ${transition.trigger.event}` : ''} · {transition.commitBoundary.kind}</small>
+                  <small>{transition.result}</small>
+                  {(transition.recovery ?? []).map((recovery, index) => <small key={`${transition.id}-recovery-${index}`}>Recovery: {recovery.condition} → {recovery.target.screenId}{recovery.target.stateId ? ` / ${recovery.target.stateId}` : ''}</small>)}
+                </div>
+              ))}
+              {!flow.transitions && <div className="flow-primary">Legacy flow · transition graph required before Golden promotion</div>}
+            </div>
+          ))}
         </section>
       );
     }
     return (
       <>
-        <section className="inspector-section"><div className="inspector-title"><Focus size={16} /><strong>页面意图</strong></div><p>{selected.goal}</p><div className="primary-tag">Primary · {selected.primaryAction}</div></section>
-        <section className="inspector-section"><div className="inspector-title"><FileCode2 size={16} /><strong>约束</strong><span>{selected.constraints.length}</span></div><ul>{selected.constraints.map((item) => <li key={item}>{item}</li>)}</ul></section>
-        <section className="inspector-section"><div className="inspector-title"><Component size={16} /><strong>组件树</strong><span>{selected.nodes.length}</span></div><div className="component-tree">{selected.nodes.map((node) => <div key={node.id}><span className="tree-line" /><span>{node.component}</span><small>{contracts.find((item) => item.name === node.component)?.category ?? 'missing'}</small></div>)}</div></section>
+        <section className="inspector-section"><div className="inspector-title"><Focus size={16} /><strong>页面意图</strong></div><p>{resolvedSelected?.goal}</p><div className="primary-tag">Primary · {resolvedSelected?.primaryAction}</div></section>
+        <section className="inspector-section"><div className="inspector-title"><FileCode2 size={16} /><strong>约束</strong><span>{resolvedSelected?.constraints.length ?? 0}</span></div><ul>{(resolvedSelected?.constraints ?? []).map((item) => <li key={item}>{item}</li>)}</ul></section>
+        <section className="inspector-section"><div className="inspector-title"><Component size={16} /><strong>组件树</strong><span>{resolvedSelected?.nodes.length ?? 0}</span></div><div className="component-tree">{(resolvedSelected?.nodes ?? []).map((node) => <div key={node.id}><span className="tree-line" /><span>{node.component}</span><small>{contracts.find((item) => item.name === node.component)?.category ?? 'missing'}</small></div>)}</div></section>
         <section className="inspector-section"><div className="inspector-title"><CheckCircle2 size={16} /><strong>Design lint</strong><span>{issues.length}</span></div>{issues.length === 0 ? <div className="lint-success"><CheckCircle2 size={17} />通过全部规则</div> : <div className="lint-list">{issues.map((issue) => <div key={`${issue.rule}-${issue.nodeId ?? ''}`}><CircleAlert size={16} /><span><strong>{issue.rule}</strong>{issue.message}</span></div>)}</div>}</section>
         <section className="inspector-section token-preview"><div className="inspector-title"><SwatchBook size={16} /><strong>活跃 Token</strong></div><div className="token-swatches">{(['screenBackground', 'surface', 'textPrimary', 'textSecondary', 'accent', 'accentSoft'] as const).map((name) => <div key={name}><span style={{ background: context.tokens.color[name] }} /><small>{name}</small></div>)}</div></section>
         {paths && <section className="inspector-section storage-panel"><div className="inspector-title"><GitBranch size={16} /><strong>事实源</strong><Check size={14} /></div><p>.design-harness 由目标仓库和 Git 管理。</p><code>{paths.storageRoot}</code></section>}
@@ -369,6 +397,7 @@ export default function App(): ReactElement {
             <button onClick={() => void copyContext()}><Clipboard size={15} />ChatGPT Context</button>
             <button onClick={() => void loadProjects()} disabled={busy}><RefreshCw className={busy ? 'spin' : ''} size={15} />刷新</button>
             {view === 'screens' && <label className="device-select"><Smartphone size={15} /><select aria-label="设备" value="iphone-16-pro" onChange={() => undefined}><option value="iphone-16-pro">iPhone 16 Pro</option></select><ChevronDown size={13} /></label>}
+            {view === 'screens' && selected && selectedStateIds.length > 1 && <label className="device-select"><Layers3 size={15} /><select aria-label="页面状态" value={activeStateId} onChange={(event) => setActiveStateId(event.target.value)}>{selected.states?.map((state) => <option key={state.id} value={state.id}>{state.name}</option>)}</select><ChevronDown size={13} /></label>}
             {view === 'screens' && <label><span>{Math.round(zoom * 100)}%</span><input type="range" min="0.55" max="1" step="0.01" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label>}
           </div>
         </header>
@@ -386,8 +415,8 @@ export default function App(): ReactElement {
           />
         ) : view === 'screens' && selected ? (
           <div className="canvas-grid">
-            <div className="artboard-label"><strong>{selected.name}</strong><span>{context.tokens.device.iphoneWidth} × {context.tokens.device.iphoneHeight}</span></div>
-            <div className="device-frame" style={{ transform: `scale(${zoom})` }}><div className="dynamic-island" /><MockScreen key={selected.id} spec={selected} onNavigateScreen={setSelectedId} /></div>
+            <div className="artboard-label"><strong>{selected.name}</strong><span>{activeStateId} · {context.tokens.device.iphoneWidth} × {context.tokens.device.iphoneHeight}</span></div>
+            <div className="device-frame" style={{ transform: `scale(${zoom})` }}><div className="dynamic-island" /><MockScreen key={`${selected.id}-${activeStateId}`} spec={resolvedSelected ?? selected} onNavigateScreen={setSelectedId} /></div>
           </div>
         ) : renderAssetWorkspace()}
       </section>

@@ -80,6 +80,39 @@ export type ProductDesignModel = {
     "userJob": string;
     "screenIds": Array<string>;
     "status": "draft" | "candidate" | "validated";
+    "entry"?: {
+      "screenId": string;
+      "stateId"?: string;
+    };
+    "transitions"?: Array<{
+      "id": string;
+      "from": {
+        "screenId": string;
+        "stateId"?: string;
+      };
+      "trigger": {
+        "interactionId": string;
+        "event"?: string;
+      };
+      "guard"?: string;
+      "commitBoundary": {
+        "kind": "none" | "local_state" | "durable_write" | "coordinated_writes";
+        "description"?: string;
+      };
+      "result": string;
+      "to": {
+        "screenId": string;
+        "stateId"?: string;
+      };
+      "recovery"?: Array<{
+        "condition": string;
+        "target": {
+          "screenId": string;
+          "stateId"?: string;
+        };
+        "result": string;
+      }>;
+    }>;
   }>;
   "patterns": Array<{
     "id": string;
@@ -116,6 +149,19 @@ export type ScreenSpec = {
     "id": string;
     "component": string;
     "props"?: Record<string, unknown>;
+  }>;
+  "initialStateId"?: string;
+  "states"?: Array<{
+    "id": string;
+    "name": string;
+    "meaning": string;
+    "primaryAction"?: string;
+    "constraints"?: Array<string>;
+    "nodes"?: Array<{
+      "id": string;
+      "component": string;
+      "props"?: Record<string, unknown>;
+    }>;
   }>;
 };
 

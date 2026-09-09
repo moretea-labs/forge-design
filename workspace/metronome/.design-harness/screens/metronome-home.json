@@ -53,5 +53,20 @@
         "activeLabel": "暂停练习"
       }
     }
+  ],
+  "initialStateId": "idle",
+  "states": [
+    {
+      "id": "idle",
+      "name": "未开始",
+      "meaning": "允许调整 BPM 并开始练习",
+      "primaryAction": "start-practice"
+    },
+    {
+      "id": "running",
+      "name": "练习中",
+      "meaning": "练习已开始，主操作转为停止",
+      "primaryAction": "stop-practice"
+    }
   ]
 }

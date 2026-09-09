@@ -33,6 +33,8 @@ Do not redesign one screen in isolation when its meaning depends on adjacent ste
 
 The review must check that the information users enter, the information emphasized after saving, and the information used to find the record later are semantically aligned.
 
+A validated flow is a transition graph, not an ordered screenshot list. Each flow declares an entry screen/state and transitions with the semantic trigger, optional guard, persistence commit boundary, result, destination screen/state, and explicit recovery targets when failure changes the user path. `screenIds` remains a compatibility/index field; it is not sufficient evidence for Golden promotion.
+
 A list row cannot be designed correctly without understanding what the create/edit flow captures and what the detail screen considers important.
 
 ## 3. Information model
@@ -67,6 +69,8 @@ Examples:
 - loading / failed / unavailable
 
 Only states that deserve attention should receive strong visual treatment. A state existing in the data model does not justify a badge, pill, card, or accent color.
+
+Screen state variants belong to one Screen Spec when they preserve the same page identity and User Job. Normal, empty, loading, error, degraded, historical, disabled, or domain-specific states must not be modeled as unrelated screens merely to obtain different screenshots. The base Screen composition supplies defaults; a named state may override primary action, constraints, or composition while keeping one screen identity.
 
 ## 5. Interaction model
 

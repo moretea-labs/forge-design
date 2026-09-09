@@ -88,3 +88,28 @@ export type DesignProjectPaths = {
   product: string;
   designUnits: string;
 };
+
+export type ScreenStateVariant = NonNullable<ScreenSpec['states']>[number];
+export type ProductFlow = ProductDesignModel['flows'][number];
+export type ProductFlowTransition = NonNullable<ProductFlow['transitions']>[number];
+
+export function screenStateIds(spec: ScreenSpec): string[] {
+  return spec.states && spec.states.length > 0 ? spec.states.map((state) => state.id) : ['normal'];
+}
+
+export function initialScreenStateId(spec: ScreenSpec): string {
+  return spec.states && spec.states.length > 0 ? (spec.initialStateId ?? spec.states[0].id) : 'normal';
+}
+
+export function resolveScreenState(spec: ScreenSpec, stateId?: string): ScreenSpec {
+  if (!spec.states || spec.states.length === 0) return spec;
+  const resolvedStateId = stateId ?? initialScreenStateId(spec);
+  const variant = spec.states.find((state) => state.id === resolvedStateId);
+  if (!variant) return spec;
+  return {
+    ...spec,
+    primaryAction: variant.primaryAction ?? spec.primaryAction,
+    constraints: variant.constraints ?? spec.constraints,
+    nodes: variant.nodes ?? spec.nodes,
+  };
+}

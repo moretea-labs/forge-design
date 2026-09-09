@@ -209,6 +209,163 @@
               "candidate",
               "validated"
             ]
+          },
+          "entry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "screenId"
+            ],
+            "properties": {
+              "screenId": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              },
+              "stateId": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              }
+            }
+          },
+          "transitions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "from",
+                "trigger",
+                "commitBoundary",
+                "result",
+                "to"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "from": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "screenId"
+                  ],
+                  "properties": {
+                    "screenId": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                    },
+                    "stateId": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                    }
+                  }
+                },
+                "trigger": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "interactionId"
+                  ],
+                  "properties": {
+                    "interactionId": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                    },
+                    "event": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "guard": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "commitBoundary": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "none",
+                        "local_state",
+                        "durable_write",
+                        "coordinated_writes"
+                      ]
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                },
+                "result": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "to": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "screenId"
+                  ],
+                  "properties": {
+                    "screenId": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                    },
+                    "stateId": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                    }
+                  }
+                },
+                "recovery": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "condition",
+                      "target",
+                      "result"
+                    ],
+                    "properties": {
+                      "condition": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "target": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "screenId"
+                        ],
+                        "properties": {
+                          "screenId": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                          },
+                          "stateId": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                          }
+                        }
+                      },
+                      "result": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

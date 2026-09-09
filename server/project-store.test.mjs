@@ -297,3 +297,54 @@ describe('ProjectStore design.md transport', () => {
     expect(await store.getManifest('fixture')).toEqual(before);
   });
 });
+
+describe('ProjectStore screen state and transition flow semantics', () => {
+  it('rejects a screen whose declared initial state does not exist', () => {
+    expect(() => validateScreen({
+      schemaVersion: 1,
+      id: 'stateful',
+      name: 'Stateful',
+      device: 'iphone-16-pro',
+      goal: 'Exercise state validation.',
+      primaryAction: 'continue',
+      constraints: [],
+      nodes: [{ id: 'action', component: 'PrimaryAction' }],
+      initialStateId: 'missing',
+      states: [{ id: 'normal', name: 'Normal', meaning: 'Default state.' }],
+    }, 'stateful')).toThrow(DesignStoreError);
+  });
+
+  it('rejects transition targets that reference an unknown screen state', async () => {
+    const { store } = await createFixture();
+    const product = await store.getProductModel('fixture');
+    product.flows[0].entry = { screenId: 'home', stateId: 'normal' };
+    product.flows[0].transitions = [{
+      id: 'continue',
+      from: { screenId: 'home', stateId: 'normal' },
+      trigger: { interactionId: 'primary-action', event: 'tap' },
+      commitBoundary: { kind: 'none' },
+      result: 'Continue the flow.',
+      to: { screenId: 'home', stateId: 'missing' },
+    }];
+    await store.putProductModel('fixture', product);
+    const validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.join(' ')).toContain('unknown state missing');
+  });
+
+  it('does not treat a legacy screenIds-only flow as Golden-ready', async () => {
+    const { store } = await createFixture();
+    const product = await store.getProductModel('fixture');
+    product.brief.status = 'ready';
+    product.flows[0].status = 'validated';
+    delete product.flows[0].entry;
+    delete product.flows[0].transitions;
+    product.golden.status = 'approved';
+    product.golden.review = { stage: 'visual_reviewed', userDecision: 'accepted', artifactRefs: ['controller-artifacts/review.png'], notes: [] };
+    await store.putProductModel('fixture', product);
+    const validation = await store.validateProject('fixture');
+    expect(validation.goldenGate.flowReady).toBe(false);
+    expect(validation.goldenGate.canApprove).toBe(false);
+    expect(validation.goldenGate.blockers.join(' ')).toContain('transition graph');
+  });
+});
