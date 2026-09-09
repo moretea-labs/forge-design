@@ -2,7 +2,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DesignStoreError, ProjectStore, validateProductModel, validateScreen, validateTokens } from './project-store.mjs';
+import { DesignStoreError, ProjectStore, validateComponents, validateProductModel, validateScreen, validateTokens } from './project-store.mjs';
 import { parseDesignMarkdown, renderDesignMarkdown } from './design-markdown.mjs';
 
 async function createFixture() {
@@ -346,5 +346,32 @@ describe('ProjectStore screen state and transition flow semantics', () => {
     expect(validation.goldenGate.flowReady).toBe(false);
     expect(validation.goldenGate.canApprove).toBe(false);
     expect(validation.goldenGate.blockers.join(' ')).toContain('transition graph');
+  });
+});
+
+
+describe('ProjectStore typed component and declarative preview semantics', () => {
+  it('keeps legacy allowedProps-only component contracts readable', () => {
+    expect(() => validateComponents({ schemaVersion: 1, components: [{ name: 'LegacyRow', purpose: 'Compatibility fixture.', category: 'content', allowedProps: ['title'] }] })).not.toThrow();
+  });
+
+  it('rejects invalid declarative preview parent references', () => {
+    expect(() => validateComponents({ schemaVersion: 1, components: [{ name: 'TypedRow', purpose: 'Typed fixture.', category: 'content', interactionRole: 'display', props: [{ name: 'title', type: 'string', required: true, description: 'Title.' }], variants: [{ id: 'standard', name: 'Standard' }], states: [{ id: 'default', name: 'Default' }], preview: { nodes: [{ id: 'title', primitive: 'text', parentId: 'missing', content: { kind: 'prop', value: 'title' } }] } }] })).toThrow(DesignStoreError);
+  });
+
+  it('validates typed props and declared component variants across screen compositions', async () => {
+    const { store } = await createFixture();
+    const components = await store.getComponents('fixture');
+    const action = components.components.find((component) => component.name === 'PrimaryAction');
+    expect(action?.interactionRole).toBe('primary_action');
+    const screen = await store.getScreen('fixture', 'home');
+    const actionNode = screen.nodes.find((node) => node.component === 'PrimaryAction');
+    actionNode.props.label = 42;
+    actionNode.variant = 'missing';
+    await store.putScreen('fixture', screen);
+    const validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.join(' ')).toContain('does not match type string');
+    expect(validation.errors.join(' ')).toContain('unknown PrimaryAction variant missing');
   });
 });

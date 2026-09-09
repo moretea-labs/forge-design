@@ -125,6 +125,12 @@ Consistency has four layers:
 
 A shared icon is part of this contract. If the product uses one canonical filter meaning, sibling screens should not arbitrarily alternate among unrelated filter icons or interaction forms.
 
+### Component contracts and design preview
+
+A reusable component contract describes product semantics before implementation details. Modern contracts should declare typed props, meaningful variants/states, interaction role, layout and accessibility constraints, and optional implementation-binding metadata. A component preview is project-owned declarative composition built from Forge Design primitives and token references; it must not execute arbitrary project code or require Forge Design core to know business-specific component names. Legacy `allowedProps` contracts remain readable for compatibility, but they are insufficient evidence for a mature reusable component family.
+
+The production implementation may later bind to the accepted component contract, but production code is downstream delivery evidence and never becomes the visual-design authority during Phase C.
+
 ## 8. Visual design and tokens
 
 Only after product hierarchy and interaction are stable should the workflow choose typography roles, color roles, spacing, radius, surfaces, icon treatment, and other tokens.

@@ -323,7 +323,7 @@ export default function App(): ReactElement {
           <div className="selected-contract-card">
             <div><Component size={20} /><strong>{selectedComponent.name}</strong><span>{selectedComponent.category}</span></div>
             <p>{selectedComponent.purpose}</p>
-            <div>{selectedComponent.allowedProps.map((prop) => <code key={prop}>{prop}</code>)}</div>
+            <div>{(selectedComponent.props?.map((prop) => `${prop.name}:${prop.type}`) ?? selectedComponent.allowedProps ?? []).map((prop) => <code key={prop}>{prop}</code>)}</div>
           </div>
         )}
         {isTokens && (
@@ -416,7 +416,7 @@ export default function App(): ReactElement {
         ) : view === 'screens' && selected ? (
           <div className="canvas-grid">
             <div className="artboard-label"><strong>{selected.name}</strong><span>{activeStateId} · {context.tokens.device.iphoneWidth} × {context.tokens.device.iphoneHeight}</span></div>
-            <div className="device-frame" style={{ transform: `scale(${zoom})` }}><div className="dynamic-island" /><MockScreen key={`${selected.id}-${activeStateId}`} spec={resolvedSelected ?? selected} onNavigateScreen={setSelectedId} /></div>
+            <div className="device-frame" style={{ transform: `scale(${zoom})` }}><div className="dynamic-island" /><MockScreen key={`${selected.id}-${activeStateId}`} spec={resolvedSelected ?? selected} components={context.components} onNavigateScreen={setSelectedId} /></div>
           </div>
         ) : renderAssetWorkspace()}
       </section>
@@ -444,7 +444,7 @@ export default function App(): ReactElement {
             <div className="inspector-tabs single-tab"><button className="active">Repository Asset</button></div>
             <section className="inspector-section"><div className="inspector-title"><GitBranch size={16} /><strong>存储规则</strong></div><p>编辑器保存的是目标仓库里的正式 JSON，不是浏览器缓存。</p>{paths && <code className="path-code">{view === 'tokens' ? paths.tokens : paths.components}</code>}</section>
             <section className="inspector-section"><div className="inspector-title"><Clipboard size={16} /><strong>ChatGPT 可读</strong></div><p>Context API 一次返回 Manifest、Token、组件契约和所有 Screen Spec。</p><button className="inspector-action" onClick={() => void copyContext()}><Clipboard size={14} />复制完整上下文</button></section>
-            {view === 'components' && selectedComponent && <section className="inspector-section"><div className="inspector-title"><Component size={16} /><strong>{selectedComponent.name}</strong></div><p>{selectedComponent.purpose}</p><ul>{selectedComponent.allowedProps.map((prop) => <li key={prop}>{prop}</li>)}</ul></section>}
+            {view === 'components' && selectedComponent && <section className="inspector-section"><div className="inspector-title"><Component size={16} /><strong>{selectedComponent.name}</strong></div><p>{selectedComponent.purpose}</p><p><strong>Role</strong> · {selectedComponent.interactionRole ?? 'legacy'}</p><ul>{(selectedComponent.props?.map((prop) => `${prop.name} · ${prop.type}${prop.required ? ' · required' : ''}`) ?? selectedComponent.allowedProps ?? []).map((prop) => <li key={prop}>{prop}</li>)}</ul>{selectedComponent.variants?.length ? <p>Variants · {selectedComponent.variants.map((item) => item.id).join(', ')}</p> : null}{selectedComponent.states?.length ? <p>States · {selectedComponent.states.map((item) => item.id).join(', ')}</p> : null}</section>}
           </>
         )}
       </aside>

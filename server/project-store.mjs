@@ -62,14 +62,113 @@ export function validateTokens(document) {
   return validateSchema('tokens', document);
 }
 
+function componentPropNames(component) {
+  if (Array.isArray(component.props) && component.props.length > 0) return component.props.map((prop) => prop.name);
+  return component.allowedProps ?? [];
+}
+
+function componentPropValueValid(definition, value) {
+  if (definition.type === 'string') return typeof value === 'string';
+  if (definition.type === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (definition.type === 'boolean') return typeof value === 'boolean';
+  if (definition.type === 'enum') return typeof value === 'string' && Array.isArray(definition.enumValues) && definition.enumValues.includes(value);
+  return false;
+}
+
 export function validateComponents(document) {
   validateSchema('components', document);
   const names = new Set();
   for (const component of document.components) {
     assert(!names.has(component.name), `Duplicate component contract: ${component.name}.`, 'DUPLICATE_COMPONENT_NAME');
     names.add(component.name);
+    const propNames = new Set();
+    for (const prop of component.props ?? []) {
+      assert(!propNames.has(prop.name), `Duplicate component prop ${component.name}.${prop.name}.`, 'DUPLICATE_COMPONENT_PROP');
+      propNames.add(prop.name);
+      if (prop.type === 'enum') assert(Array.isArray(prop.enumValues) && prop.enumValues.length > 0, `Enum prop ${component.name}.${prop.name} requires enumValues.`, 'COMPONENT_ENUM_VALUES_REQUIRED');
+    }
+    for (const collectionName of ['variants', 'states']) {
+      const ids = new Set();
+      for (const item of component[collectionName] ?? []) {
+        assert(!ids.has(item.id), `Duplicate ${component.name} ${collectionName} id ${item.id}.`, 'DUPLICATE_COMPONENT_VARIANT_STATE');
+        ids.add(item.id);
+      }
+    }
+    if (component.preview?.nodes) {
+      const previewIds = new Set(component.preview.nodes.map((item) => item.id));
+      assert(previewIds.size === component.preview.nodes.length, `Duplicate preview node id in ${component.name}.`, 'DUPLICATE_PREVIEW_NODE');
+      const variantIds = new Set((component.variants ?? []).map((item) => item.id));
+      const stateIds = new Set((component.states ?? []).map((item) => item.id));
+      const parentById = new Map();
+      for (const item of component.preview.nodes) {
+        if (item.parentId) {
+          assert(previewIds.has(item.parentId), `${component.name} preview node ${item.id} references unknown parent ${item.parentId}.`, 'PREVIEW_PARENT_UNKNOWN');
+          assert(item.parentId !== item.id, `${component.name} preview node ${item.id} cannot parent itself.`, 'PREVIEW_PARENT_CYCLE');
+          parentById.set(item.id, item.parentId);
+        }
+        for (const id of item.when?.variants ?? []) assert(variantIds.has(id), `${component.name} preview node ${item.id} references unknown variant ${id}.`, 'PREVIEW_VARIANT_UNKNOWN');
+        for (const id of item.when?.states ?? []) assert(stateIds.has(id), `${component.name} preview node ${item.id} references unknown state ${id}.`, 'PREVIEW_STATE_UNKNOWN');
+      }
+      for (const id of previewIds) {
+        const seen = new Set([id]);
+        let current = parentById.get(id);
+        while (current) {
+          assert(!seen.has(current), `${component.name} preview hierarchy contains a cycle at ${current}.`, 'PREVIEW_PARENT_CYCLE');
+          seen.add(current);
+          current = parentById.get(current);
+        }
+      }
+    }
   }
   return document;
+}
+
+function starterComponentContracts() {
+  return { schemaVersion: 1, components: [
+    {
+      name: 'ScreenHeader', purpose: 'Page identity and one optional secondary action.', category: 'navigation', interactionRole: 'navigation',
+      props: [
+        { name: 'eyebrow', type: 'string', required: false, description: 'Optional contextual label.' },
+        { name: 'title', type: 'string', required: true, description: 'Primary page title.' },
+        { name: 'actionLabel', type: 'string', required: false, description: 'Optional secondary action label.' },
+      ],
+      variants: [{ id: 'standard', name: 'Standard' }], states: [{ id: 'default', name: 'Default' }],
+      layout: { axis: 'horizontal', width: 'fill', alignment: 'center', description: 'Title block with optional trailing action.' },
+      accessibility: { summary: 'Expose the title as a header and secondary action separately.', traits: ['header'] },
+      preview: { nodes: [
+        { id: 'root', primitive: 'stack', style: { axis: 'vertical', gap: 'xs', width: 'fill', padding: 'sm' } },
+        { id: 'eyebrow', primitive: 'text', parentId: 'root', content: { kind: 'prop', value: 'eyebrow', fallback: 'Context' }, style: { typography: 'caption', color: 'textSecondary' } },
+        { id: 'title', primitive: 'text', parentId: 'root', content: { kind: 'prop', value: 'title', fallback: 'Untitled' }, style: { typography: 'title', color: 'textPrimary' } },
+      ] },
+    },
+    {
+      name: 'EmptyState', purpose: 'Explain an empty canvas and the next valid action.', category: 'content', interactionRole: 'display',
+      props: [
+        { name: 'title', type: 'string', required: true, description: 'Empty-state conclusion.' },
+        { name: 'body', type: 'string', required: true, description: 'Explanation and next-step context.' },
+      ], variants: [{ id: 'standard', name: 'Standard' }], states: [{ id: 'default', name: 'Default' }],
+      layout: { axis: 'vertical', width: 'fill', alignment: 'center', description: 'Centered explanatory content.' },
+      accessibility: { summary: 'Read the empty-state conclusion before supporting explanation.', traits: ['summary'] },
+      preview: { nodes: [
+        { id: 'root', primitive: 'surface', style: { axis: 'vertical', gap: 'sm', padding: 'xl', radius: 'card', background: 'surface', width: 'fill', alignment: 'center' } },
+        { id: 'title', primitive: 'text', parentId: 'root', content: { kind: 'prop', value: 'title', fallback: 'Nothing here yet' }, style: { typography: 'headline', color: 'textPrimary' } },
+        { id: 'body', primitive: 'text', parentId: 'root', content: { kind: 'prop', value: 'body', fallback: 'Add the next valid item.' }, style: { typography: 'body', color: 'textSecondary' } },
+      ] },
+    },
+    {
+      name: 'PrimaryAction', purpose: 'Exactly one dominant screen action.', category: 'control', interactionRole: 'primary_action',
+      props: [
+        { name: 'label', type: 'string', required: true, description: 'Primary action label.' },
+        { name: 'activeLabel', type: 'string', required: false, description: 'Label for the active component state.' },
+      ], variants: [{ id: 'filled', name: 'Filled' }], states: [{ id: 'idle', name: 'Idle' }, { id: 'active', name: 'Active' }],
+      layout: { axis: 'none', width: 'fill', alignment: 'center', description: 'Full-width primary action.' },
+      accessibility: { summary: 'Expose as the screen primary action.', traits: ['button'] },
+      preview: { nodes: [
+        { id: 'idle', primitive: 'button', content: { kind: 'prop', value: 'label', fallback: 'Continue' }, iconName: 'play', style: { width: 'fill' }, when: { states: ['idle'] } },
+        { id: 'active', primitive: 'button', content: { kind: 'prop', value: 'activeLabel', fallback: 'Continue' }, iconName: 'stop', style: { width: 'fill' }, when: { states: ['active'] } },
+      ] },
+    },
+  ] };
 }
 
 function assertUniqueNodeIds(nodes, label = 'screen') {
@@ -611,17 +710,35 @@ export class ProjectStore {
 
   async validateProject(projectId) {
     const context = await this.getContext(projectId);
-    const componentNames = new Set(context.components.components.map((component) => component.name));
     const screenIds = new Set(context.screens.map((screen) => screen.id));
     const errors = [];
     const warnings = [];
     if (!context.screens.some((screen) => screen.id === context.project.activeScreenId)) {
       errors.push(`activeScreenId ${context.project.activeScreenId} does not exist.`);
     }
-    for (const screen of context.screens) {
-      for (const node of screen.nodes) {
-        if (!componentNames.has(node.component)) errors.push(`${screen.id}/${node.id} uses unregistered component ${node.component}.`);
+    const componentMap = new Map(context.components.components.map((component) => [component.name, component]));
+    const validateComposition = (screen, nodes, stateId = 'base') => {
+      for (const node of nodes) {
+        const contract = componentMap.get(node.component);
+        const identity = `${screen.id}[${stateId}]/${node.id}`;
+        if (!contract) {
+          errors.push(`${identity} uses unregistered component ${node.component}.`);
+          continue;
+        }
+        const allowedProps = new Set(componentPropNames(contract));
+        for (const key of Object.keys(node.props ?? {})) if (!allowedProps.has(key)) errors.push(`${identity} uses unsupported prop ${node.component}.${key}.`);
+        for (const definition of contract.props ?? []) {
+          const value = node.props?.[definition.name];
+          if (definition.required && value === undefined) errors.push(`${identity} is missing required prop ${node.component}.${definition.name}.`);
+          else if (value !== undefined && !componentPropValueValid(definition, value)) errors.push(`${identity} prop ${node.component}.${definition.name} does not match type ${definition.type}.`);
+        }
+        if (node.variant && !(contract.variants ?? []).some((item) => item.id === node.variant)) errors.push(`${identity} uses unknown ${node.component} variant ${node.variant}.`);
+        if (node.state && !(contract.states ?? []).some((item) => item.id === node.state)) errors.push(`${identity} uses unknown ${node.component} state ${node.state}.`);
       }
+    };
+    for (const screen of context.screens) {
+      validateComposition(screen, screen.nodes);
+      for (const state of screen.states ?? []) if (state.nodes) validateComposition(screen, state.nodes, state.id);
     }
     if (context.storage.migrationRequired) {
       warnings.push(`storageVersion ${context.storage.storageVersion} is readable compatibility state; migrate to ${context.storage.currentStorageVersion} before design-unit writes.`);
@@ -703,11 +820,7 @@ export class ProjectStore {
         review: { stage: 'not_started', userDecision: 'pending', artifactRefs: [], notes: [] },
       },
     };
-    const components = { schemaVersion: 1, components: [
-      { name: 'ScreenHeader', purpose: 'Page identity and one optional secondary action.', allowedProps: ['eyebrow', 'title', 'actionLabel'], category: 'navigation' },
-      { name: 'EmptyState', purpose: 'Explain an empty canvas and the next valid action.', allowedProps: ['title', 'body'], category: 'content' },
-      { name: 'PrimaryAction', purpose: 'Exactly one dominant screen action.', allowedProps: ['label', 'activeLabel'], category: 'control' },
-    ] };
+    const components = starterComponentContracts();
     const designUnits = { schemaVersion: 1, units: [{
       id: 'primary',
       name: `${name} Primary Design`,

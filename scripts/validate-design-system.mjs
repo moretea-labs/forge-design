@@ -26,6 +26,10 @@ try {
   if (!projects.some((project) => project.id === 'metronome')) errors.push('Tracked metronome design project was not discovered.');
   const validation = await store.validateProject('metronome');
   errors.push(...validation.errors.map((error) => `workspace/metronome: ${error}`));
+  const context = await store.getContext('metronome');
+  for (const component of context.components.components) {
+    if (!component.preview?.nodes?.length) errors.push(`workspace/metronome component ${component.name} must use declarative preview composition.`);
+  }
 } catch (error) {
   errors.push(`Unable to validate tracked design assets: ${error.message}`);
 }
@@ -39,6 +43,11 @@ async function walk(directory) {
     else files.push(path);
   }
   return files;
+}
+
+const mockScreenSource = await readFile(join(root, 'src/components/MockScreen.tsx'), 'utf8');
+for (const businessRendererName of ['BPMControllerNode', 'BeatTrajectoryNode', 'PracticeSummaryNode']) {
+  if (mockScreenSource.includes(businessRendererName)) errors.push(`src/components/MockScreen.tsx contains business-specific renderer ${businessRendererName}; use project declarative preview contracts instead.`);
 }
 
 for (const file of await walk(join(root, 'src'))) {

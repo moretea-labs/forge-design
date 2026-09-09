@@ -4,58 +4,627 @@
     {
       "name": "ScreenHeader",
       "purpose": "Page identity and one optional secondary action.",
-      "allowedProps": [
-        "eyebrow",
-        "title",
-        "actionLabel"
+      "category": "navigation",
+      "interactionRole": "navigation",
+      "props": [
+        {
+          "name": "eyebrow",
+          "type": "string",
+          "required": false,
+          "description": "Optional context above the title."
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "description": "Primary page title."
+        },
+        {
+          "name": "actionLabel",
+          "type": "string",
+          "required": false,
+          "description": "Optional trailing action label."
+        }
       ],
-      "category": "navigation"
+      "preview": {
+        "nodes": [
+          {
+            "id": "root",
+            "primitive": "stack",
+            "style": {
+              "axis": "vertical",
+              "gap": "xs",
+              "padding": "sm",
+              "width": "fill"
+            }
+          },
+          {
+            "id": "eyebrow",
+            "primitive": "text",
+            "parentId": "root",
+            "content": {
+              "kind": "prop",
+              "value": "eyebrow",
+              "fallback": "今日练习"
+            },
+            "style": {
+              "typography": "caption",
+              "color": "textSecondary"
+            }
+          },
+          {
+            "id": "title",
+            "primitive": "text",
+            "parentId": "root",
+            "content": {
+              "kind": "prop",
+              "value": "title",
+              "fallback": "节拍训练"
+            },
+            "style": {
+              "typography": "title",
+              "color": "textPrimary"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "id": "standard",
+          "name": "Standard"
+        }
+      ],
+      "states": [
+        {
+          "id": "default",
+          "name": "Default"
+        }
+      ],
+      "layout": {
+        "axis": "horizontal",
+        "width": "fill",
+        "alignment": "center",
+        "description": "Page identity first."
+      },
+      "accessibility": {
+        "summary": "Read title as the page heading.",
+        "traits": [
+          "header"
+        ]
+      }
     },
     {
       "name": "BPMController",
       "purpose": "Primary tempo control with bounded adjustments.",
-      "allowedProps": [
-        "initialBpm",
-        "min",
-        "max"
+      "category": "control",
+      "interactionRole": "input",
+      "props": [
+        {
+          "name": "initialBpm",
+          "type": "number",
+          "required": true,
+          "description": "Current BPM value."
+        },
+        {
+          "name": "min",
+          "type": "number",
+          "required": true,
+          "description": "Minimum allowed BPM."
+        },
+        {
+          "name": "max",
+          "type": "number",
+          "required": true,
+          "description": "Maximum allowed BPM."
+        }
       ],
-      "category": "control"
+      "preview": {
+        "nodes": [
+          {
+            "id": "root",
+            "primitive": "surface",
+            "style": {
+              "axis": "vertical",
+              "gap": "md",
+              "padding": "xl",
+              "radius": "card",
+              "background": "surface",
+              "width": "fill",
+              "alignment": "center"
+            }
+          },
+          {
+            "id": "label",
+            "primitive": "text",
+            "parentId": "root",
+            "content": {
+              "kind": "literal",
+              "value": "当前速度"
+            },
+            "style": {
+              "typography": "caption",
+              "color": "textSecondary"
+            }
+          },
+          {
+            "id": "value",
+            "primitive": "value",
+            "parentId": "root",
+            "content": {
+              "kind": "prop",
+              "value": "initialBpm",
+              "fallback": "72"
+            },
+            "style": {
+              "typography": "display",
+              "color": "textPrimary"
+            }
+          },
+          {
+            "id": "unit",
+            "primitive": "badge",
+            "parentId": "root",
+            "content": {
+              "kind": "literal",
+              "value": "BPM"
+            }
+          },
+          {
+            "id": "progress",
+            "primitive": "progress",
+            "parentId": "root",
+            "content": {
+              "kind": "prop",
+              "value": "initialBpm",
+              "fallback": "50"
+            },
+            "style": {
+              "width": "fill"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "id": "standard",
+          "name": "Standard"
+        },
+        {
+          "id": "compact",
+          "name": "Compact"
+        }
+      ],
+      "states": [
+        {
+          "id": "idle",
+          "name": "Idle"
+        },
+        {
+          "id": "adjusting",
+          "name": "Adjusting"
+        }
+      ],
+      "layout": {
+        "axis": "vertical",
+        "width": "fill",
+        "alignment": "center",
+        "description": "Large numeric fact with bounded adjustment semantics."
+      },
+      "accessibility": {
+        "summary": "Expose BPM as an adjustable numeric value with minimum and maximum.",
+        "traits": [
+          "adjustable"
+        ]
+      }
     },
     {
       "name": "BeatTrajectory",
       "purpose": "Compact single-beat timing visualization.",
-      "allowedProps": [
-        "beats",
-        "compact"
+      "category": "content",
+      "interactionRole": "display",
+      "props": [
+        {
+          "name": "beats",
+          "type": "number",
+          "required": true,
+          "description": "Number of beats shown."
+        },
+        {
+          "name": "compact",
+          "type": "boolean",
+          "required": true,
+          "description": "Whether the visualization uses compact density."
+        }
       ],
-      "category": "content"
+      "preview": {
+        "nodes": [
+          {
+            "id": "root",
+            "primitive": "surface",
+            "style": {
+              "axis": "vertical",
+              "gap": "md",
+              "padding": "lg",
+              "radius": "card",
+              "background": "surface",
+              "width": "fill"
+            }
+          },
+          {
+            "id": "label",
+            "primitive": "text",
+            "parentId": "root",
+            "content": {
+              "kind": "literal",
+              "value": "单拍轨迹"
+            },
+            "style": {
+              "typography": "headline",
+              "color": "textPrimary"
+            }
+          },
+          {
+            "id": "body",
+            "primitive": "text",
+            "parentId": "root",
+            "content": {
+              "kind": "literal",
+              "value": "感知开始、中点与结束"
+            },
+            "style": {
+              "typography": "body",
+              "color": "textSecondary"
+            }
+          },
+          {
+            "id": "rail",
+            "primitive": "progress",
+            "parentId": "root",
+            "content": {
+              "kind": "literal",
+              "value": "50"
+            },
+            "style": {
+              "width": "fill"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "id": "standard",
+          "name": "Standard"
+        }
+      ],
+      "states": [
+        {
+          "id": "default",
+          "name": "Default"
+        }
+      ],
+      "layout": {
+        "axis": "vertical",
+        "width": "fill",
+        "alignment": "stretch",
+        "description": "Secondary visualization below the primary control."
+      },
+      "accessibility": {
+        "summary": "Describe the trajectory without relying on color alone.",
+        "traits": [
+          "image"
+        ]
+      }
     },
     {
       "name": "PracticeSummary",
       "purpose": "Secondary practice context without competing with the main action.",
-      "allowedProps": [
-        "duration",
-        "streak"
+      "category": "content",
+      "interactionRole": "disclosure",
+      "props": [
+        {
+          "name": "duration",
+          "type": "string",
+          "required": true,
+          "description": "Practice duration summary."
+        },
+        {
+          "name": "streak",
+          "type": "string",
+          "required": true,
+          "description": "Practice streak summary."
+        }
       ],
-      "category": "content"
+      "preview": {
+        "nodes": [
+          {
+            "id": "root",
+            "primitive": "surface",
+            "style": {
+              "axis": "horizontal",
+              "gap": "lg",
+              "padding": "lg",
+              "radius": "card",
+              "background": "surface",
+              "width": "fill",
+              "justify": "between",
+              "alignment": "center"
+            }
+          },
+          {
+            "id": "duration-stack",
+            "primitive": "stack",
+            "parentId": "root",
+            "style": {
+              "axis": "vertical",
+              "gap": "xs"
+            }
+          },
+          {
+            "id": "duration-label",
+            "primitive": "text",
+            "parentId": "duration-stack",
+            "content": {
+              "kind": "literal",
+              "value": "本周节奏"
+            },
+            "style": {
+              "typography": "caption",
+              "color": "textSecondary"
+            }
+          },
+          {
+            "id": "duration",
+            "primitive": "value",
+            "parentId": "duration-stack",
+            "content": {
+              "kind": "prop",
+              "value": "duration",
+              "fallback": "0 分钟"
+            },
+            "style": {
+              "typography": "headline",
+              "color": "textPrimary"
+            }
+          },
+          {
+            "id": "streak-stack",
+            "primitive": "stack",
+            "parentId": "root",
+            "style": {
+              "axis": "vertical",
+              "gap": "xs"
+            }
+          },
+          {
+            "id": "streak-label",
+            "primitive": "text",
+            "parentId": "streak-stack",
+            "content": {
+              "kind": "literal",
+              "value": "连续练习"
+            },
+            "style": {
+              "typography": "caption",
+              "color": "textSecondary"
+            }
+          },
+          {
+            "id": "streak",
+            "primitive": "value",
+            "parentId": "streak-stack",
+            "content": {
+              "kind": "prop",
+              "value": "streak",
+              "fallback": "0 天"
+            },
+            "style": {
+              "typography": "headline",
+              "color": "textPrimary"
+            }
+          },
+          {
+            "id": "chevron",
+            "primitive": "icon",
+            "parentId": "root",
+            "iconName": "chevron",
+            "style": {
+              "color": "textSecondary"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "id": "standard",
+          "name": "Standard"
+        }
+      ],
+      "states": [
+        {
+          "id": "collapsed",
+          "name": "Collapsed"
+        },
+        {
+          "id": "expanded",
+          "name": "Expanded"
+        }
+      ],
+      "layout": {
+        "axis": "horizontal",
+        "width": "fill",
+        "alignment": "center",
+        "description": "Two supporting facts and disclosure affordance."
+      },
+      "accessibility": {
+        "summary": "Read both summary facts before the disclosure affordance.",
+        "traits": [
+          "summary",
+          "button"
+        ]
+      }
     },
     {
       "name": "EmptyState",
       "purpose": "Explain an empty canvas and the next valid action.",
-      "allowedProps": [
-        "title",
-        "body"
+      "category": "content",
+      "interactionRole": "display",
+      "props": [
+        {
+          "name": "title",
+          "type": "string",
+          "required": true,
+          "description": "Empty-state conclusion."
+        },
+        {
+          "name": "body",
+          "type": "string",
+          "required": true,
+          "description": "Supporting explanation."
+        }
       ],
-      "category": "content"
+      "preview": {
+        "nodes": [
+          {
+            "id": "root",
+            "primitive": "surface",
+            "style": {
+              "axis": "vertical",
+              "gap": "sm",
+              "padding": "xl",
+              "radius": "card",
+              "background": "surface",
+              "width": "fill",
+              "alignment": "center"
+            }
+          },
+          {
+            "id": "icon",
+            "primitive": "icon",
+            "parentId": "root",
+            "iconName": "plus",
+            "style": {
+              "color": "accent"
+            }
+          },
+          {
+            "id": "title",
+            "primitive": "text",
+            "parentId": "root",
+            "content": {
+              "kind": "prop",
+              "value": "title",
+              "fallback": "暂无内容"
+            },
+            "style": {
+              "typography": "headline",
+              "color": "textPrimary"
+            }
+          },
+          {
+            "id": "body",
+            "primitive": "text",
+            "parentId": "root",
+            "content": {
+              "kind": "prop",
+              "value": "body",
+              "fallback": "添加下一项内容。"
+            },
+            "style": {
+              "typography": "body",
+              "color": "textSecondary"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "id": "standard",
+          "name": "Standard"
+        }
+      ],
+      "states": [
+        {
+          "id": "default",
+          "name": "Default"
+        }
+      ],
+      "layout": {
+        "axis": "vertical",
+        "width": "fill",
+        "alignment": "center",
+        "description": "Centered explanatory state."
+      },
+      "accessibility": {
+        "summary": "Read conclusion before supporting explanation.",
+        "traits": [
+          "summary"
+        ]
+      }
     },
     {
       "name": "PrimaryAction",
       "purpose": "Exactly one dominant screen action.",
-      "allowedProps": [
-        "label",
-        "activeLabel"
+      "category": "control",
+      "interactionRole": "primary_action",
+      "props": [
+        {
+          "name": "label",
+          "type": "string",
+          "required": true,
+          "description": "Primary action label."
+        },
+        {
+          "name": "activeLabel",
+          "type": "string",
+          "required": false,
+          "description": "Label when the domain action is active."
+        }
       ],
-      "category": "control"
+      "preview": {
+        "nodes": [
+          {
+            "id": "button",
+            "primitive": "button",
+            "content": {
+              "kind": "prop",
+              "value": "label",
+              "fallback": "继续"
+            },
+            "iconName": "play",
+            "style": {
+              "width": "fill"
+            }
+          }
+        ]
+      },
+      "variants": [
+        {
+          "id": "filled",
+          "name": "Filled"
+        }
+      ],
+      "states": [
+        {
+          "id": "idle",
+          "name": "Idle"
+        },
+        {
+          "id": "active",
+          "name": "Active"
+        }
+      ],
+      "layout": {
+        "axis": "none",
+        "width": "fill",
+        "alignment": "center",
+        "description": "Single dominant full-width action."
+      },
+      "accessibility": {
+        "summary": "Expose as the unique primary action on the screen.",
+        "traits": [
+          "button"
+        ]
+      }
     }
   ]
 }

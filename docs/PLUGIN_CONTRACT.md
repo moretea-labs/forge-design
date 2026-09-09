@@ -10,7 +10,7 @@ Every target repository owns a tracked `.design-harness/` directory. The browser
 - `product.json`: embedded Product Design Model and project-wide Golden state for projects that model product semantics inside Forge Design;
 - `design-units.json`: multiple design families, their Screen Family/screen membership, and pinned upstream Product Contract references;
 - `tokens.json`: the only design-token source of truth;
-- `components.json`: component contracts ChatGPT may compose;
+- `components.json`: typed semantic component contracts ChatGPT may compose, including optional project-owned declarative preview trees; Forge core must not require business-specific renderer code for each component;
 - `screens/<screen-id>.json`: one independent Screen identity per file, including its state variants when present.
 
 No browser database or generated source mirror is authoritative. `schemas/*.schema.json` is the one structural model authority; runtime validation and generated TypeScript document types consume that authority rather than redefining the persisted model.

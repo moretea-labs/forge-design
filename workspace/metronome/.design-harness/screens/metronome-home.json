@@ -18,7 +18,9 @@
         "eyebrow": "今日练习",
         "title": "节拍训练",
         "actionLabel": "设置"
-      }
+      },
+      "variant": "standard",
+      "state": "default"
     },
     {
       "id": "tempo",
@@ -27,7 +29,9 @@
         "initialBpm": 72,
         "min": 30,
         "max": 220
-      }
+      },
+      "variant": "standard",
+      "state": "idle"
     },
     {
       "id": "trajectory",
@@ -35,7 +39,9 @@
       "props": {
         "beats": 4,
         "compact": true
-      }
+      },
+      "variant": "standard",
+      "state": "default"
     },
     {
       "id": "summary",
@@ -43,7 +49,9 @@
       "props": {
         "duration": "12 分钟",
         "streak": "连续 4 天"
-      }
+      },
+      "variant": "standard",
+      "state": "collapsed"
     },
     {
       "id": "start",
@@ -51,7 +59,9 @@
       "props": {
         "label": "开始练习",
         "activeLabel": "暂停练习"
-      }
+      },
+      "variant": "filled",
+      "state": "idle"
     }
   ],
   "initialStateId": "idle",

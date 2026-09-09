@@ -41,8 +41,70 @@ export type ComponentContractsDocument = {
   "components": Array<{
     "name": string;
     "purpose": string;
-    "allowedProps": Array<string>;
     "category": "layout" | "content" | "control" | "navigation";
+    "allowedProps"?: Array<string>;
+    "props"?: Array<{
+      "name": string;
+      "type": "string" | "number" | "boolean" | "enum";
+      "required": boolean;
+      "description": string;
+      "enumValues"?: Array<string>;
+    }>;
+    "variants"?: Array<{
+      "id": string;
+      "name": string;
+      "description"?: string;
+    }>;
+    "states"?: Array<{
+      "id": string;
+      "name": string;
+      "description"?: string;
+    }>;
+    "interactionRole"?: "display" | "navigation" | "primary_action" | "secondary_action" | "destructive_action" | "input" | "selection" | "toggle" | "disclosure" | "status";
+    "layout"?: {
+      "axis"?: "none" | "vertical" | "horizontal" | "overlay";
+      "width"?: "fill" | "hug";
+      "alignment"?: "leading" | "center" | "trailing" | "stretch";
+      "description"?: string;
+    };
+    "accessibility"?: {
+      "summary": string;
+      "traits": Array<"header" | "button" | "adjustable" | "image" | "summary" | "static_text">;
+    };
+    "implementation"?: {
+      "platform": "swiftui" | "android" | "web" | "other";
+      "symbol": string;
+      "module"?: string;
+    };
+    "preview"?: {
+      "nodes": Array<{
+        "id": string;
+        "primitive": "stack" | "text" | "icon" | "surface" | "divider" | "spacer" | "button" | "value" | "badge" | "progress";
+        "parentId"?: string;
+        "content"?: {
+          "kind": "literal" | "prop";
+          "value": string;
+          "fallback"?: string;
+        };
+        "iconName"?: string;
+        "style"?: {
+          "axis"?: "vertical" | "horizontal";
+          "gap"?: string;
+          "padding"?: string;
+          "typography"?: string;
+          "color"?: string;
+          "background"?: string;
+          "radius"?: string;
+          "alignment"?: "leading" | "center" | "trailing" | "stretch";
+          "justify"?: "start" | "center" | "between" | "end";
+          "width"?: "fill" | "hug";
+        };
+        "when"?: {
+          "variants"?: Array<string>;
+          "states"?: Array<string>;
+        };
+      }>;
+    };
   }>;
 };
 
@@ -149,6 +211,8 @@ export type ScreenSpec = {
     "id": string;
     "component": string;
     "props"?: Record<string, unknown>;
+    "variant"?: string;
+    "state"?: string;
   }>;
   "initialStateId"?: string;
   "states"?: Array<{

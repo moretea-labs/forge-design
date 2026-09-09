@@ -4,20 +4,392 @@
   "title": "Design Harness component contracts",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "components"],
+  "required": [
+    "schemaVersion",
+    "components"
+  ],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": {
+      "const": 1
+    },
     "components": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["name", "purpose", "allowedProps", "category"],
+        "required": [
+          "name",
+          "purpose",
+          "category"
+        ],
         "properties": {
-          "name": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*$" },
-          "purpose": { "type": "string", "minLength": 1 },
-          "allowedProps": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
-          "category": { "enum": ["layout", "content", "control", "navigation"] }
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Za-z0-9]*$"
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1
+          },
+          "category": {
+            "enum": [
+              "layout",
+              "content",
+              "control",
+              "navigation"
+            ]
+          },
+          "allowedProps": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "props": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "type",
+                "required",
+                "description"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][A-Za-z0-9_]*$"
+                },
+                "type": {
+                  "enum": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "enum"
+                  ]
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "enumValues": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "name"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "states": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "name"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "interactionRole": {
+            "enum": [
+              "display",
+              "navigation",
+              "primary_action",
+              "secondary_action",
+              "destructive_action",
+              "input",
+              "selection",
+              "toggle",
+              "disclosure",
+              "status"
+            ]
+          },
+          "layout": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "axis": {
+                "enum": [
+                  "none",
+                  "vertical",
+                  "horizontal",
+                  "overlay"
+                ]
+              },
+              "width": {
+                "enum": [
+                  "fill",
+                  "hug"
+                ]
+              },
+              "alignment": {
+                "enum": [
+                  "leading",
+                  "center",
+                  "trailing",
+                  "stretch"
+                ]
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "accessibility": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "summary",
+              "traits"
+            ],
+            "properties": {
+              "summary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "traits": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "header",
+                    "button",
+                    "adjustable",
+                    "image",
+                    "summary",
+                    "static_text"
+                  ]
+                }
+              }
+            }
+          },
+          "implementation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "platform",
+              "symbol"
+            ],
+            "properties": {
+              "platform": {
+                "enum": [
+                  "swiftui",
+                  "android",
+                  "web",
+                  "other"
+                ]
+              },
+              "symbol": {
+                "type": "string",
+                "minLength": 1
+              },
+              "module": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "preview": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "nodes"
+            ],
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "id",
+                    "primitive"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                    },
+                    "primitive": {
+                      "enum": [
+                        "stack",
+                        "text",
+                        "icon",
+                        "surface",
+                        "divider",
+                        "spacer",
+                        "button",
+                        "value",
+                        "badge",
+                        "progress"
+                      ]
+                    },
+                    "parentId": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                    },
+                    "content": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "kind",
+                        "value"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "literal",
+                            "prop"
+                          ]
+                        },
+                        "value": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "fallback": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "iconName": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "style": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "axis": {
+                          "enum": [
+                            "vertical",
+                            "horizontal"
+                          ]
+                        },
+                        "gap": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "padding": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "typography": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "color": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "background": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "radius": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "alignment": {
+                          "enum": [
+                            "leading",
+                            "center",
+                            "trailing",
+                            "stretch"
+                          ]
+                        },
+                        "justify": {
+                          "enum": [
+                            "start",
+                            "center",
+                            "between",
+                            "end"
+                          ]
+                        },
+                        "width": {
+                          "enum": [
+                            "fill",
+                            "hug"
+                          ]
+                        }
+                      }
+                    },
+                    "when": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "variants": {
+                          "type": "array",
+                          "uniqueItems": true,
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                          }
+                        },
+                        "states": {
+                          "type": "array",
+                          "uniqueItems": true,
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
