@@ -23,7 +23,7 @@ No browser database or generated source mirror is authoritative. `schemas/*.sche
 - JSON CLI: `npm run --silent design -- <command>`
 - Local HTTP API: `/api/design`
 
-The official external provider is `design`. `design_get_context` returns Design Units + embedded Product Design Model + Golden Gate + visual assets. Existing product-model actions remain bounded typed access to the embedded product layer. More granular provider mutation for Design Units/screens/components/tokens is intentionally deferred to P0-D; ordinary Web/CLI operations already use the same ProjectStore and canonical files.
+The official external provider is `design`. `design_get_context` returns Design Units + embedded Product Design Model + Golden Gate + visual assets. Ordinary ChatGPT design work uses granular typed provider actions for Design Units, tokens, component contracts, Screen Specs, and individual Product Flows. Provider argument schemas embed the same canonical repository JSON Schemas used by ProjectStore rather than maintaining provider-only field definitions. Product Flow writes update `product.json` through read-modify-validate-write; no separate flow authority exists. Provider writes accept registered project and semantic asset identities only, never arbitrary repository paths. Delete and Golden acceptance are deliberately excluded from this ordinary granular write surface.
 
 ## Responsibility split
 
