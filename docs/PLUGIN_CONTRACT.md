@@ -31,4 +31,4 @@ The official external provider is `design`. `design_get_context` returns Design 
 2. Structural validation comes from canonical JSON Schemas; cross-asset design semantics and lint belong to the core/store.
 3. Rendering and temporary editor state belong to the web application.
 4. Production application source mutation is a separate explicit capability and review step.
-5. Git remains responsible for review, history, branching, merge, and rollback.
+5. Git remains responsible for review, history, branching, merge, and rollback. Multi-file design imports/migrations additionally use the repository-native storage transaction so a provider crash cannot leave mixed-version canonical assets.

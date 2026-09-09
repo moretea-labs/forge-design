@@ -2,8 +2,9 @@
 import { createInterface } from 'node:readline';
 import { createProjectStore } from '../server/project-store.mjs';
 import { executeProviderAction, providerActions, providerCapabilities } from '../server/provider-actions.mjs';
+import { PACKAGE_VERSION } from './version.mjs';
 
-const VERSION = '0.4.0';
+const VERSION = PACKAGE_VERSION;
 const PLUGIN_ID = 'design';
 const store = createProjectStore();
 

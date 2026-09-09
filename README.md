@@ -112,6 +112,6 @@ See [Product Design Workflow](docs/PRODUCT_DESIGN_WORKFLOW.md), [Storage](docs/S
 
 ## Project
 
-Latest published release: `v0.3.0`; current main targets `v0.4.0` with first-class Product Contracts and Golden gates. Use Issues for reproducible design/provider bugs and feature requests. Cross-product Forge questions belong in [Forge Discussions](https://github.com/moretea-labs/forge/discussions). Security reports should use GitHub Private Vulnerability Reporting; see [SECURITY.md](SECURITY.md).
+Latest published release: `v0.3.0`; current main is the `v0.5.0` candidate with Design Units, state/transition flows, typed declarative previews, granular ChatGPT actions, human acceptance/freeze authority, Review Profiles, and crash-safe bundle publication. Use Issues for reproducible design/provider bugs and feature requests. Cross-product Forge questions belong in [Forge Discussions](https://github.com/moretea-labs/forge/discussions). Security reports should use GitHub Private Vulnerability Reporting; see [SECURITY.md](SECURITY.md).
 
 Licensed under the [MIT License](LICENSE).

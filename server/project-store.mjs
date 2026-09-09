@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -15,6 +15,8 @@ export const defaultProjectRegistryPath = join(homedir(), '.forge-design', 'proj
 export const storageDirectoryName = '.design-harness';
 const idPattern = /^[a-z0-9][a-z0-9_-]*$/;
 const maxDocumentBytes = 2 * 1024 * 1024;
+const transactionMarkerName = '.forge-design-transaction.json';
+const activeTransactionIds = new Set();
 const execFileAsync = promisify(execFile);
 
 export class DesignStoreError extends Error {
@@ -456,6 +458,93 @@ async function writeJsonAtomic(path, document) {
   }
 }
 
+function transactionPaths(root, transactionId) {
+  const stageRoot = join(root, `.forge-design-stage-${transactionId}`);
+  return {
+    markerPath: join(root, transactionMarkerName),
+    stageRoot,
+    stageStoragePath: join(stageRoot, storageDirectoryName),
+    backupPath: join(root, `.design-harness-backup-${transactionId}`),
+  };
+}
+
+function processIsAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
+async function readTransactionMarker(root) {
+  const markerPath = join(root, transactionMarkerName);
+  if (!(await pathExists(markerPath))) return null;
+  let marker;
+  try {
+    marker = await readJson(markerPath);
+  } catch (error) {
+    throw new DesignStoreError(`Invalid Forge Design transaction marker at ${root}: ${error.message}`, 409, 'DESIGN_TRANSACTION_MARKER_INVALID');
+  }
+  assert(marker?.schemaVersion === 1 && typeof marker.transactionId === 'string' && Number.isInteger(marker.pid), 'Invalid Forge Design transaction marker.', 'DESIGN_TRANSACTION_MARKER_INVALID');
+  return marker;
+}
+
+async function recoverInterruptedStorageTransaction(root) {
+  const marker = await readTransactionMarker(root);
+  if (!marker) return { recovered: false };
+  if (activeTransactionIds.has(marker.transactionId)) {
+    throw new DesignStoreError(`Forge Design transaction ${marker.transactionId} is active.`, 409, 'DESIGN_TRANSACTION_BUSY');
+  }
+  if (marker.pid !== process.pid && processIsAlive(marker.pid)) {
+    throw new DesignStoreError(`Forge Design transaction ${marker.transactionId} is owned by active process ${marker.pid}.`, 409, 'DESIGN_TRANSACTION_BUSY');
+  }
+  const { markerPath, stageRoot, stageStoragePath, backupPath } = transactionPaths(root, marker.transactionId);
+  const canonicalPath = join(root, storageDirectoryName);
+  if (await pathExists(canonicalPath)) {
+    await rm(stageRoot, { recursive: true, force: true });
+    await rm(backupPath, { recursive: true, force: true });
+    await rm(markerPath, { force: true });
+    return { recovered: true, outcome: 'canonical_kept' };
+  }
+  if (await pathExists(backupPath)) {
+    await rename(backupPath, canonicalPath);
+    await rm(stageRoot, { recursive: true, force: true });
+    await rm(markerPath, { force: true });
+    return { recovered: true, outcome: 'rolled_back' };
+  }
+  if (await pathExists(stageStoragePath)) {
+    await rename(stageStoragePath, canonicalPath);
+    await rm(stageRoot, { recursive: true, force: true });
+    await rm(markerPath, { force: true });
+    return { recovered: true, outcome: 'staged_candidate_published' };
+  }
+  throw new DesignStoreError(`Forge Design transaction ${marker.transactionId} cannot be recovered because canonical, backup, and staged storage are all missing.`, 409, 'DESIGN_TRANSACTION_RECOVERY_FAILED');
+}
+
+async function beginStorageTransaction(root) {
+  await recoverInterruptedStorageTransaction(root);
+  const transactionId = randomUUID();
+  const paths = transactionPaths(root, transactionId);
+  const marker = { schemaVersion: 1, transactionId, pid: process.pid, startedAt: new Date().toISOString() };
+  try {
+    await writeFile(paths.markerPath, `${JSON.stringify(marker, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
+  } catch (error) {
+    if (error?.code === 'EEXIST') throw new DesignStoreError('Another Forge Design storage transaction is already active.', 409, 'DESIGN_TRANSACTION_BUSY');
+    throw error;
+  }
+  activeTransactionIds.add(transactionId);
+  return { ...paths, transactionId };
+}
+
+async function endStorageTransaction(transaction) {
+  activeTransactionIds.delete(transaction.transactionId);
+  let current = null;
+  try { current = await readTransactionMarker(dirname(transaction.markerPath)); } catch { current = null; }
+  if (!current || current.transactionId === transaction.transactionId) await rm(transaction.markerPath, { force: true });
+}
+
 function normalizeProjectRoot(candidate) {
   const root = resolve(candidate);
   return basename(root) === storageDirectoryName ? dirname(root) : root;
@@ -488,10 +577,12 @@ export class ProjectStore {
     workspaceRoot = defaultWorkspaceRoot,
     externalRoots = externalRootsFromEnvironment(),
     registryPath = defaultProjectRegistryPath,
+    transactionCheckpoint = null,
   } = {}) {
     this.workspaceRoot = resolve(workspaceRoot);
     this.externalRoots = [...new Set(externalRoots.map(normalizeProjectRoot))];
     this.registryPath = resolve(registryPath);
+    this.transactionCheckpoint = transactionCheckpoint;
   }
 
   async getRegisteredProjectRoots() {
@@ -527,6 +618,7 @@ export class ProjectStore {
     }
     const projects = [];
     for (const root of roots) {
+      await recoverInterruptedStorageTransaction(root);
       const manifestPath = join(root, storageDirectoryName, 'project.json');
       if (!(await pathExists(manifestPath))) continue;
       const manifest = validateProjectManifest(await readJson(manifestPath));
@@ -724,6 +816,41 @@ export class ProjectStore {
     return { schemaVersion: 1, units, freeze: document.freeze ?? null, freezeCurrent };
   }
 
+  async publishStorageTransaction(project, mutateStage) {
+    const transaction = await beginStorageTransaction(project.root);
+    let oldMoved = false;
+    let published = false;
+    try {
+      await cp(project.storagePath, transaction.stageStoragePath, { recursive: true, errorOnExist: true, force: false });
+      await mutateStage(transaction.stageStoragePath);
+      const stagedStore = new ProjectStore({
+        workspaceRoot: join(transaction.stageRoot, '.workspace'),
+        externalRoots: [transaction.stageRoot],
+        registryPath: join(transaction.stageRoot, '.registry.json'),
+      });
+      await stagedStore.getContext(project.manifest.id);
+      if (this.transactionCheckpoint) await this.transactionCheckpoint('prepared', { projectId: project.manifest.id, transactionId: transaction.transactionId });
+      await rename(project.storagePath, transaction.backupPath);
+      oldMoved = true;
+      if (this.transactionCheckpoint) await this.transactionCheckpoint('old_moved', { projectId: project.manifest.id, transactionId: transaction.transactionId });
+      await rename(transaction.stageStoragePath, project.storagePath);
+      published = true;
+      await rm(transaction.backupPath, { recursive: true, force: true }).catch(() => {});
+      await rm(transaction.stageRoot, { recursive: true, force: true }).catch(() => {});
+      return { transactionId: transaction.transactionId };
+    } catch (error) {
+      if (!published && oldMoved && await pathExists(transaction.backupPath)) {
+        if (await pathExists(project.storagePath)) await rm(project.storagePath, { recursive: true, force: true });
+        await rename(transaction.backupPath, project.storagePath);
+      }
+      await rm(transaction.stageRoot, { recursive: true, force: true }).catch(() => {});
+      if (!published) await rm(transaction.backupPath, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    } finally {
+      await endStorageTransaction(transaction);
+    }
+  }
+
   async migrateProjectStorage(projectId) {
     const project = await this.resolveProject(projectId);
     if (project.manifest.storageVersion === currentStorageVersion) {
@@ -733,10 +860,12 @@ export class ProjectStore {
       throw new DesignStoreError(`Unsupported migration from ${project.manifest.storageVersion}.`, 400, 'STORAGE_MIGRATION_UNSUPPORTED');
     }
     const designUnits = await this.getDesignUnits(projectId);
-    await writeJsonAtomic(join(project.storagePath, 'design-units.json'), designUnits);
     const nextManifest = { ...project.manifest, storageVersion: currentStorageVersion };
     validateProjectManifest(nextManifest);
-    await writeJsonAtomic(join(project.storagePath, 'project.json'), nextManifest);
+    await this.publishStorageTransaction(project, async (stageStoragePath) => {
+      await writeJsonAtomic(join(stageStoragePath, 'design-units.json'), designUnits);
+      await writeJsonAtomic(join(stageStoragePath, 'project.json'), nextManifest);
+    });
     return { projectId, fromVersion: '1.0.0', toVersion: currentStorageVersion, changed: true, designUnits };
   }
 
@@ -866,14 +995,16 @@ export class ProjectStore {
       }
     }
 
-    await writeJsonAtomic(join(project.storagePath, 'project.json'), manifest);
-    await writeJsonAtomic(join(project.storagePath, 'tokens.json'), tokens);
-    await writeJsonAtomic(join(project.storagePath, 'components.json'), components);
-    if (product) await writeJsonAtomic(join(project.storagePath, 'product.json'), product);
-    if (importedDesignUnits) await writeJsonAtomic(join(project.storagePath, 'design-units.json'), designUnits);
-    for (const screen of importedScreens) {
-      await writeJsonAtomic(join(project.storagePath, 'screens', `${screen.id}.json`), screen);
-    }
+    await this.publishStorageTransaction(project, async (stageStoragePath) => {
+      await writeJsonAtomic(join(stageStoragePath, 'project.json'), manifest);
+      await writeJsonAtomic(join(stageStoragePath, 'tokens.json'), tokens);
+      await writeJsonAtomic(join(stageStoragePath, 'components.json'), components);
+      if (product) await writeJsonAtomic(join(stageStoragePath, 'product.json'), product);
+      if (importedDesignUnits) await writeJsonAtomic(join(stageStoragePath, 'design-units.json'), designUnits);
+      for (const screen of importedScreens) {
+        await writeJsonAtomic(join(stageStoragePath, 'screens', `${screen.id}.json`), screen);
+      }
+    });
     const importedIds = new Set(importedScreens.map((screen) => screen.id));
     return {
       schemaVersion: 1,

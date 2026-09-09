@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PACKAGE_VERSION } from './scripts/version.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const helperPath = resolve(root, 'scripts/forge-provider.mjs');
@@ -64,7 +65,7 @@ const actions = [
   writeAction('design_import_markdown','Import design.md','Validate and import portable design.md into one registered design project.',objectArgs({project_id:projectId,markdown:{type:'string',minLength:1}}),30000,false),
 ];
 const registration = {
-  pluginId:'design', providerPluginId:'design', displayName:'Forge Design', provider:'moretea-labs', pluginVersion:'0.4.0', protocolVersion:'1.0', scope:'controller', enabled:true,
+  pluginId:'design', providerPluginId:'design', displayName:'Forge Design', provider:'moretea-labs', pluginVersion:PACKAGE_VERSION, protocolVersion:'1.0', scope:'controller', enabled:true,
   transport:{kind:'managed_cli_json', runtimeExecutable:process.execPath, helperPath, cwd:root, maxRequestBytes:8*1024*1024, maxResponseBytes:8*1024*1024, healthTimeoutMs:5000, actionTimeoutMs:30000},
   permissions:[scopeRead,scopeProjects,scopeWrite],
   capabilities:[

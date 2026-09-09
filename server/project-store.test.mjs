@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -9,7 +9,7 @@ import { parseDesignMarkdown, renderDesignMarkdown } from './design-markdown.mjs
 
 const execFileAsync = promisify(execFile);
 
-async function createFixture() {
+async function createFixture({ transactionCheckpoint = null } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'design-harness-'));
   const workspaceRoot = join(root, 'workspace');
   const projectRoot = join(workspaceRoot, 'fixture');
@@ -17,6 +17,7 @@ async function createFixture() {
     workspaceRoot,
     externalRoots: [],
     registryPath: join(root, 'projects.local.json'),
+    transactionCheckpoint,
   });
   await store.initProject({ projectRoot, id: 'fixture', name: 'Fixture' });
   return { root, projectRoot, store };
@@ -105,6 +106,74 @@ describe('ProjectStore creation semantics', () => {
   });
 });
 
+
+describe('ProjectStore bundle transaction recovery', () => {
+  it('rolls back a whole design.md import when publication fails after moving the old storage', async () => {
+    let injectFailure = true;
+    const { store, projectRoot } = await createFixture({
+      transactionCheckpoint: async (phase) => {
+        if (phase === 'old_moved' && injectFailure) {
+          injectFailure = false;
+          throw new Error('injected publish failure');
+        }
+      },
+    });
+    const beforeTokens = await readFile(join(projectRoot, '.design-harness', 'tokens.json'), 'utf8');
+    const beforeScreen = await readFile(join(projectRoot, '.design-harness', 'screens', 'home.json'), 'utf8');
+    const bundle = parseDesignMarkdown(await store.exportDesignMarkdown('fixture'));
+    bundle.tokens.meta.version = '9.9.9';
+    bundle.screens[0].goal = 'This candidate must never partially publish.';
+
+    await expect(store.importDesignMarkdown('fixture', renderDesignMarkdown(bundle))).rejects.toThrow('injected publish failure');
+    expect(await readFile(join(projectRoot, '.design-harness', 'tokens.json'), 'utf8')).toBe(beforeTokens);
+    expect(await readFile(join(projectRoot, '.design-harness', 'screens', 'home.json'), 'utf8')).toBe(beforeScreen);
+    const residue = (await readdir(projectRoot)).filter((name) => name === '.forge-design-transaction.json' || name.startsWith('.forge-design-stage-') || name.startsWith('.design-harness-backup-'));
+    expect(residue).toEqual([]);
+  });
+
+  it('recovers an interrupted old-moved transaction on the next project discovery', async () => {
+    const { root, projectRoot } = await createFixture();
+    const transactionId = 'dead-transaction';
+    const canonical = join(projectRoot, '.design-harness');
+    const backup = join(projectRoot, `.design-harness-backup-${transactionId}`);
+    const stageRoot = join(projectRoot, `.forge-design-stage-${transactionId}`);
+    const staged = join(stageRoot, '.design-harness');
+    const beforeManifest = await readFile(join(canonical, 'project.json'), 'utf8');
+    await mkdir(stageRoot, { recursive: true });
+    await cp(canonical, staged, { recursive: true });
+    await rename(canonical, backup);
+    await writeFile(join(projectRoot, '.forge-design-transaction.json'), JSON.stringify({ schemaVersion: 1, transactionId, pid: 99999999, startedAt: new Date().toISOString() }, null, 2) + '\n', 'utf8');
+
+    const recoveredStore = new ProjectStore({ workspaceRoot: join(root, 'workspace'), externalRoots: [], registryPath: join(root, 'projects.local.json') });
+    expect((await recoveredStore.listProjects()).map((project) => project.id)).toEqual(['fixture']);
+    expect(await readFile(join(canonical, 'project.json'), 'utf8')).toBe(beforeManifest);
+    const residue = (await readdir(projectRoot)).filter((name) => name === '.forge-design-transaction.json' || name.startsWith('.forge-design-stage-') || name.startsWith('.design-harness-backup-'));
+    expect(residue).toEqual([]);
+  });
+
+  it('rolls back storage migration as one bundle when publication fails', async () => {
+    let injectFailure = true;
+    const { store, projectRoot } = await createFixture({
+      transactionCheckpoint: async (phase) => {
+        if (phase === 'old_moved' && injectFailure) {
+          injectFailure = false;
+          throw new Error('injected migration publish failure');
+        }
+      },
+    });
+    const harness = join(projectRoot, '.design-harness');
+    const manifestPath = join(harness, 'project.json');
+    const designUnitsPath = join(harness, 'design-units.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest.storageVersion = '1.0.0';
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+    await rm(designUnitsPath);
+
+    await expect(store.migrateProjectStorage('fixture')).rejects.toThrow('injected migration publish failure');
+    expect(JSON.parse(await readFile(manifestPath, 'utf8')).storageVersion).toBe('1.0.0');
+    await expect(readFile(designUnitsPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+});
 
 describe('ProjectStore storage migration and design units', () => {
   it('initializes storageVersion 1.1.0 with canonical design units', async () => {

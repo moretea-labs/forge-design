@@ -24,10 +24,17 @@ async function fixture() {
 describe('Forge provider granular design actions', () => {
   it('keeps provider, static manifest, and install registration action inventories aligned', async () => {
     const manifest = JSON.parse(await readFile(new URL('../forge-plugin.json', import.meta.url), 'utf8'));
+    const packageDocument = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
     expect(manifest.actions).toEqual(providerActions);
+    expect(manifest.version).toBe(packageDocument.version);
     const output = execFileSync(process.execPath, [new URL('../forge-plugin-install.mjs', import.meta.url).pathname], { encoding: 'utf8' });
     const registration = JSON.parse(output).registration;
+    expect(registration.pluginVersion).toBe(packageDocument.version);
     expect(registration.actions.map((action) => action.actionId)).toEqual(providerActions);
+    const providerOutput = execFileSync(process.execPath, [new URL('../scripts/forge-provider.mjs', import.meta.url).pathname], { encoding: 'utf8', input: `${JSON.stringify({ schemaVersion: 1, type: 'execute', requestId: 'manifest-test', actionId: 'manifest', input: {} })}\n` });
+    const providerLines = providerOutput.trim().split(/\r?\n/).map((line) => JSON.parse(line));
+    const providerManifest = providerLines.find((line) => line.type === 'result')?.result;
+    expect(providerManifest.version).toBe(packageDocument.version);
     const putScreen = registration.actions.find((action) => action.actionId === 'design_put_screen');
     expect(putScreen.argumentsSchema.properties.screen.required).toContain('nodes');
     const putFlow = registration.actions.find((action) => action.actionId === 'design_put_product_flow');
