@@ -76,6 +76,7 @@ export function designHarnessApiPlugin(options = {}) {
             if (method === 'PUT') return sendJson(response, 200, await store.importDesignMarkdown(projectId, await readTextBody(request)));
           }
           if (resource === 'validate' && method === 'GET') return sendJson(response, 200, await store.validateProject(projectId));
+          if (resource === 'review-status' && method === 'GET') return sendJson(response, 200, await store.getDesignReviewStatus(projectId));
           if (resource === 'paths' && method === 'GET') return sendJson(response, 200, await store.getPaths(projectId));
           if (resource === 'product') {
             if (method === 'GET') return sendJson(response, 200, await store.getProductModel(projectId));

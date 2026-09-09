@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactElement } from 'react';
 import {
   Check,
   CheckCircle2,
@@ -26,6 +26,8 @@ import type {
   DesignProjectContext,
   DesignProjectPaths,
   DesignProjectSummary,
+  DesignReviewProfile,
+  DesignReviewStatus,
   DesignTokens,
   ProductDesignModel,
   ScreenSpec,
@@ -40,6 +42,30 @@ type InspectorTab = 'inspect' | 'spec' | 'flow';
 type Notice = { kind: 'success' | 'error'; message: string } | null;
 
 const json = (value: unknown) => JSON.stringify(value, null, 2);
+
+const toKebab = (value: string) => value.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+type ReviewSurfaceStyle = CSSProperties & Record<`--${string}`, string | number>;
+
+function reviewSurfaceStyle(profile: DesignReviewProfile, tokens: DesignTokens): ReviewSurfaceStyle {
+  const colors = { ...tokens.color, ...(tokens.colorModes?.[profile.colorScheme] ?? {}) };
+  const style: ReviewSurfaceStyle = {
+    width: `${profile.viewport.width + 24}px`,
+    height: `${profile.viewport.height + 24}px`,
+    colorScheme: profile.colorScheme,
+    '--review-screen-width': `${profile.viewport.width}px`,
+    '--review-screen-height': `${profile.viewport.height}px`,
+    '--review-safe-top': `${profile.viewport.safeTop}px`,
+    '--review-safe-bottom': `${profile.viewport.safeBottom}px`,
+  };
+  Object.entries(colors).forEach(([name, value]) => { style[`--color-${toKebab(name)}`] = value; });
+  Object.entries(tokens.typography).forEach(([name, type]) => {
+    style[`--type-${toKebab(name)}-size`] = `${type.size * profile.textScale}px`;
+    style[`--type-${toKebab(name)}-line`] = `${type.lineHeight * profile.textScale}px`;
+    style[`--type-${toKebab(name)}-weight`] = String(type.weight);
+  });
+  if (profile.contrast === 'increased') style.filter = 'contrast(1.15)';
+  return style;
+}
 
 function productScaffold(context: DesignProjectContext): ProductDesignModel {
   return {
@@ -109,8 +135,10 @@ export default function App(): ReactElement {
   const [projectId, setProjectId] = useState('');
   const [context, setContext] = useState<DesignProjectContext | null>(null);
   const [paths, setPaths] = useState<DesignProjectPaths | null>(null);
+  const [reviewStatus, setReviewStatus] = useState<DesignReviewStatus | null>(null);
   const [selectedId, setSelectedId] = useState('');
   const [activeStateId, setActiveStateId] = useState('normal');
+  const [reviewProfileId, setReviewProfileId] = useState('');
   const [selectedComponentName, setSelectedComponentName] = useState('');
   const [view, setView] = useState<WorkspaceView>('product');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect');
@@ -125,6 +153,8 @@ export default function App(): ReactElement {
   const contracts = context?.components.components ?? [];
   const selectedComponent = contracts.find((component) => component.name === selectedComponentName) ?? contracts[0] ?? null;
   const issues = useMemo(() => resolvedSelected && context ? lintScreen(resolvedSelected, context.components) : [], [resolvedSelected, context]);
+  const reviewProfiles = context?.designUnits.reviewProfiles ?? [];
+  const reviewProfile = reviewProfiles.find((profile) => profile.id === reviewProfileId) ?? reviewProfiles[0] ?? null;
   const selectedFlows = useMemo(() => {
     if (!context?.product || !selected) return [];
     return context.product.flows.filter((flow) => flow.screenIds.includes(selected.id) || flow.entry?.screenId === selected.id || (flow.transitions ?? []).some((transition) => transition.from.screenId === selected.id || transition.to.screenId === selected.id || (transition.recovery ?? []).some((item) => item.target.screenId === selected.id)));
@@ -134,12 +164,14 @@ export default function App(): ReactElement {
     setBusy(true);
     setNotice(null);
     try {
-      const [nextContext, nextPaths] = await Promise.all([
+      const [nextContext, nextPaths, nextReviewStatus] = await Promise.all([
         designApi.getContext(nextProjectId),
         designApi.getPaths(nextProjectId),
+        designApi.getReviewStatus(nextProjectId),
       ]);
       setContext(nextContext);
       setPaths(nextPaths);
+      setReviewStatus(nextReviewStatus);
       setProjectId(nextProjectId);
       installTokenVariables(nextContext.tokens);
       const nextScreenId = preferredScreenId && nextContext.screens.some((screen) => screen.id === preferredScreenId)
@@ -151,6 +183,9 @@ export default function App(): ReactElement {
       setSelectedComponentName((current) => nextContext.components.components.some((component) => component.name === current)
         ? current
         : nextContext.components.components[0]?.name ?? '');
+      setReviewProfileId((current) => (nextContext.designUnits.reviewProfiles ?? []).some((profile) => profile.id === current)
+        ? current
+        : nextContext.designUnits.reviewProfiles?.[0]?.id ?? '');
     } catch (error) {
       setNotice({ kind: 'error', message: error instanceof Error ? error.message : '无法读取设计项目。' });
     } finally {
@@ -396,7 +431,7 @@ export default function App(): ReactElement {
           <div className="toolbar-controls">
             <button onClick={() => void copyContext()}><Clipboard size={15} />ChatGPT Context</button>
             <button onClick={() => void loadProjects()} disabled={busy}><RefreshCw className={busy ? 'spin' : ''} size={15} />刷新</button>
-            {view === 'screens' && <label className="device-select"><Smartphone size={15} /><select aria-label="设备" value="iphone-16-pro" onChange={() => undefined}><option value="iphone-16-pro">iPhone 16 Pro</option></select><ChevronDown size={13} /></label>}
+            {view === 'screens' && reviewProfile && <label className="device-select"><Smartphone size={15} /><select aria-label="Review Profile" value={reviewProfile.id} onChange={(event) => setReviewProfileId(event.target.value)}>{reviewProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select><ChevronDown size={13} /></label>}
             {view === 'screens' && selected && selectedStateIds.length > 1 && <label className="device-select"><Layers3 size={15} /><select aria-label="页面状态" value={activeStateId} onChange={(event) => setActiveStateId(event.target.value)}>{selected.states?.map((state) => <option key={state.id} value={state.id}>{state.name}</option>)}</select><ChevronDown size={13} /></label>}
             {view === 'screens' && <label><span>{Math.round(zoom * 100)}%</span><input type="range" min="0.55" max="1" step="0.01" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label>}
           </div>
@@ -415,8 +450,8 @@ export default function App(): ReactElement {
           />
         ) : view === 'screens' && selected ? (
           <div className="canvas-grid">
-            <div className="artboard-label"><strong>{selected.name}</strong><span>{activeStateId} · {context.tokens.device.iphoneWidth} × {context.tokens.device.iphoneHeight}</span></div>
-            <div className="device-frame" style={{ transform: `scale(${zoom})` }}><div className="dynamic-island" /><MockScreen key={`${selected.id}-${activeStateId}`} spec={resolvedSelected ?? selected} components={context.components} onNavigateScreen={setSelectedId} /></div>
+            <div className="artboard-label" style={reviewProfile ? { width: reviewProfile.viewport.width } : undefined}><strong>{selected.name}</strong><span>{activeStateId}{reviewProfile ? ` · ${reviewProfile.name} · ${reviewProfile.viewport.width} × ${reviewProfile.viewport.height} · ${reviewProfile.textScale}× text` : ''}</span></div>
+            <div className="device-frame" data-color-scheme={reviewProfile?.colorScheme} data-contrast={reviewProfile?.contrast} data-reduce-motion={reviewProfile?.reduceMotion ? 'true' : 'false'} style={reviewProfile ? { ...reviewSurfaceStyle(reviewProfile, context.tokens), transform: `scale(${zoom})` } : { transform: `scale(${zoom})` }}><div className="dynamic-island" /><MockScreen key={`${selected.id}-${activeStateId}-${reviewProfile?.id ?? 'default'}`} spec={resolvedSelected ?? selected} components={context.components} onNavigateScreen={setSelectedId} /></div>
           </div>
         ) : renderAssetWorkspace()}
       </section>
@@ -426,7 +461,8 @@ export default function App(): ReactElement {
           <>
             <div className="inspector-tabs single-tab"><button className="active">Product Gate</button></div>
             <section className="inspector-section"><div className="inspector-title"><Focus size={16} /><strong>User Job</strong></div><p>{context.product?.brief.userJob ?? 'Product Contract 尚未写入仓库。'}</p></section>
-            <section className="inspector-section"><div className="inspector-title"><GitBranch size={16} /><strong>Promotion Gate</strong><span>{context.goldenGate.blockers.length}</span></div>{context.goldenGate.canApprove ? <div className="lint-success"><CheckCircle2 size={17} />可以进入 Approved Golden</div> : <div className="lint-list">{context.goldenGate.blockers.map((blocker) => <div key={blocker}><CircleAlert size={16} /><span>{blocker}</span></div>)}</div>}</section>
+            <section className="inspector-section"><div className="inspector-title"><GitBranch size={16} /><strong>Legacy Product Golden</strong><span>{context.goldenGate.blockers.length}</span></div>{context.goldenGate.canApprove ? <div className="lint-success"><CheckCircle2 size={17} />Legacy Golden gate satisfied</div> : <div className="lint-list">{context.goldenGate.blockers.map((blocker) => <div key={blocker}><CircleAlert size={16} /><span>{blocker}</span></div>)}</div>}</section>
+            <section className="inspector-section"><div className="inspector-title"><CheckCircle2 size={16} /><strong>Design Freeze</strong><span>{reviewStatus?.units.filter((unit) => unit.acceptanceCurrent).length ?? 0}/{reviewStatus?.units.length ?? 0}</span></div>{reviewStatus?.freezeCurrent ? <div className="lint-success"><CheckCircle2 size={17} />Current freeze · Phase D handoff allowed</div> : <div className="lint-list">{reviewStatus?.units.map((unit) => <div key={unit.unitId}>{unit.acceptanceCurrent ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}<span><strong>{unit.unitId}</strong><small>{unit.reviewStatus} · {unit.acceptance ? (unit.acceptanceCurrent ? 'accepted current' : 'acceptance stale') : 'not accepted'}</small></span></div>)}{reviewStatus?.freeze && !reviewStatus.freezeCurrent ? <div><CircleAlert size={16} /><span>Project freeze is stale after design changes.</span></div> : null}{!reviewStatus?.freeze ? <div><CircleAlert size={16} /><span>Project has not been frozen for implementation.</span></div> : null}</div>}</section>
             <section className="inspector-section"><div className="inspector-title"><FileCode2 size={16} /><strong>Review semantics</strong></div><p>Captured 只说明已有图片 artifact；必须实际进入模型视觉上下文才能标记 Model Visible，完成像素级审查后才能标记 Visual Reviewed。</p></section>
             {paths && <section className="inspector-section storage-panel"><div className="inspector-title"><GitBranch size={16} /><strong>事实源</strong><Check size={14} /></div><code>{paths.product}</code></section>}
           </>

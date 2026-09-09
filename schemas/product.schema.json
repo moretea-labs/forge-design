@@ -419,6 +419,10 @@
           "owner": {
             "type": "string",
             "minLength": 1
+          },
+          "canonicalComponent": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Za-z0-9]*$"
           }
         }
       }

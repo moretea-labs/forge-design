@@ -1,5 +1,7 @@
 import { access, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { homedir } from 'node:os';
 import { basename, delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +15,7 @@ export const defaultProjectRegistryPath = join(homedir(), '.forge-design', 'proj
 export const storageDirectoryName = '.design-harness';
 const idPattern = /^[a-z0-9][a-z0-9_-]*$/;
 const maxDocumentBytes = 2 * 1024 * 1024;
+const execFileAsync = promisify(execFile);
 
 export class DesignStoreError extends Error {
   constructor(message, status = 400, code = 'DESIGN_STORE_ERROR') {
@@ -224,7 +227,99 @@ export function validateProductModel(document) {
 export function validateDesignUnits(document) {
   validateSchema('design-units', document);
   assertUniqueIds(document.units, 'design unit');
+  assertUniqueIds(document.reviewProfiles ?? [], 'review profile');
+  const profileIds = new Set((document.reviewProfiles ?? []).map((profile) => profile.id));
+  const unitIds = new Set(document.units.map((unit) => unit.id));
+  for (const unit of document.units) {
+    for (const profileId of unit.review?.profileIds ?? []) {
+      assert(profileIds.has(profileId), `Design unit ${unit.id} references unknown review profile ${profileId}.`, 'DESIGN_REVIEW_PROFILE_NOT_FOUND');
+    }
+  }
+  if (document.freeze) {
+    const frozenUnitIds = new Set();
+    for (const item of document.freeze.unitDigests) {
+      assert(unitIds.has(item.unitId), `Design freeze references unknown unit ${item.unitId}.`, 'DESIGN_FREEZE_UNIT_NOT_FOUND');
+      assert(!frozenUnitIds.has(item.unitId), `Design freeze repeats unit ${item.unitId}.`, 'DESIGN_FREEZE_DUPLICATE_UNIT');
+      frozenUnitIds.add(item.unitId);
+    }
+    for (const profileId of document.freeze.profileIds) {
+      assert(profileIds.has(profileId), `Design freeze references unknown review profile ${profileId}.`, 'DESIGN_REVIEW_PROFILE_NOT_FOUND');
+    }
+  }
   return document;
+}
+
+function stableValue(value) {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (isObject(value)) return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
+  return value;
+}
+
+function stableJson(value) {
+  return JSON.stringify(stableValue(value));
+}
+
+function sha256(value) {
+  return createHash('sha256').update(stableJson(value)).digest('hex');
+}
+
+function protectedDesignEvidence(document) {
+  return {
+    freeze: document.freeze ?? null,
+    acceptances: Object.fromEntries(document.units.map((unit) => [unit.id, unit.review?.acceptance ?? null]).sort(([a], [b]) => a.localeCompare(b))),
+  };
+}
+
+function assertProtectedDesignEvidenceUnchanged(before, after) {
+  assert(stableJson(protectedDesignEvidence(before)) === stableJson(protectedDesignEvidence(after)),
+    'Human acceptance and project freeze evidence can only be changed through dedicated strong-confirmation actions.',
+    'DESIGN_ACCEPTANCE_PROTECTED');
+}
+
+function assertLegacyUserDecisionUnchanged(before, after) {
+  const previous = before?.golden?.review?.userDecision ?? 'pending';
+  const next = after?.golden?.review?.userDecision ?? 'pending';
+  assert(previous === next, 'Legacy product userDecision is protected; human acceptance is recorded by dedicated Design Unit actions.', 'DESIGN_USER_DECISION_PROTECTED');
+}
+
+function flowTouchesScreens(flow, screenIds) {
+  if ((flow.screenIds ?? []).some((id) => screenIds.has(id))) return true;
+  if (flow.entry && screenIds.has(flow.entry.screenId)) return true;
+  return (flow.transitions ?? []).some((transition) => screenIds.has(transition.from.screenId) || screenIds.has(transition.to.screenId)
+    || (transition.recovery ?? []).some((item) => screenIds.has(item.target.screenId)));
+}
+
+function screenPatternIds(screen) {
+  const ids = new Set();
+  for (const node of screen.nodes ?? []) if (node.interactionPatternId) ids.add(node.interactionPatternId);
+  for (const state of screen.states ?? []) for (const node of state.nodes ?? []) if (node.interactionPatternId) ids.add(node.interactionPatternId);
+  return ids;
+}
+
+function designUnitDigestFromContext(context, unitId) {
+  const unit = context.designUnits.units.find((item) => item.id === unitId);
+  if (!unit) throw new DesignStoreError(`Unknown design unit: ${unitId}.`, 404, 'DESIGN_UNIT_NOT_FOUND');
+  const screenIds = new Set(unit.screenIds);
+  const screens = context.screens.filter((screen) => screenIds.has(screen.id)).sort((a, b) => a.id.localeCompare(b.id));
+  const flowIds = new Set((context.product?.flows ?? []).filter((flow) => flowTouchesScreens(flow, screenIds)).map((flow) => flow.id));
+  const patternIds = new Set();
+  for (const screen of screens) for (const patternId of screenPatternIds(screen)) patternIds.add(patternId);
+  for (const pattern of context.product?.patterns ?? []) if ((pattern.validatedFlowIds ?? []).some((id) => flowIds.has(id))) patternIds.add(pattern.id);
+  const reviewProfileIds = new Set(unit.review?.profileIds ?? []);
+  const payload = {
+    schemaVersion: 1,
+    unit: { id: unit.id, name: unit.name, screenFamily: unit.screenFamily, screenIds: [...unit.screenIds].sort(), contractRefs: unit.contractRefs },
+    reviewProfiles: (context.designUnits.reviewProfiles ?? []).filter((profile) => reviewProfileIds.has(profile.id)).sort((a, b) => a.id.localeCompare(b.id)),
+    tokens: context.tokens,
+    components: context.components,
+    screens,
+    product: context.product ? {
+      brief: unit.contractRefs.length === 0 ? context.product.brief : null,
+      flows: context.product.flows.filter((flow) => flowIds.has(flow.id)).sort((a, b) => a.id.localeCompare(b.id)),
+      patterns: context.product.patterns.filter((pattern) => patternIds.has(pattern.id)).sort((a, b) => a.id.localeCompare(b.id)),
+    } : null,
+  };
+  return sha256(payload);
 }
 
 function evaluateGoldenGate(product, screens = []) {
@@ -518,6 +613,8 @@ export class ProjectStore {
   async putProductModel(projectId, document) {
     validateProductModel(document);
     const project = await this.resolveProject(projectId);
+    const current = await this.getProductModel(projectId);
+    if (current) assertLegacyUserDecisionUnchanged(current, document);
     await writeJsonAtomic(join(project.storagePath, 'product.json'), document);
     return structuredClone(document);
   }
@@ -548,8 +645,83 @@ export class ProjectStore {
     if (project.manifest.storageVersion !== currentStorageVersion) {
       throw new DesignStoreError(`Project ${projectId} uses storageVersion ${project.manifest.storageVersion}; migrate to ${currentStorageVersion} before writing design units.`, 409, 'STORAGE_MIGRATION_REQUIRED');
     }
+    const current = await this.getDesignUnits(projectId);
+    assertProtectedDesignEvidenceUnchanged(current, document);
     await writeJsonAtomic(join(project.storagePath, 'design-units.json'), document);
     return structuredClone(document);
+  }
+
+  async designUnitDigest(projectId, unitId) {
+    assertSafeId(unitId, 'design unit id');
+    return designUnitDigestFromContext(await this.getContext(projectId), unitId);
+  }
+
+  async assertDesignCandidateRevision(projectId, candidateRevision) {
+    assert(typeof candidateRevision === 'string' && /^[0-9a-f]{40,64}$/.test(candidateRevision), 'candidate revision must be an exact Git commit id.', 'DESIGN_REVISION_INVALID');
+    const project = await this.resolveProject(projectId);
+    let head;
+    try {
+      ({ stdout: head } = await execFileAsync('git', ['-C', project.root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }));
+    } catch (error) {
+      throw new DesignStoreError(`Unable to resolve Git revision for ${projectId}: ${error.message}`, 409, 'DESIGN_GIT_REVISION_UNAVAILABLE');
+    }
+    head = head.trim();
+    assert(head === candidateRevision, `Design acceptance must target current HEAD ${head}; received ${candidateRevision}.`, 'DESIGN_REVISION_MISMATCH');
+    const { stdout: status } = await execFileAsync('git', ['-C', project.root, 'status', '--porcelain=v1', '--', storageDirectoryName], { encoding: 'utf8' });
+    assert(status.trim() === '', 'Design acceptance requires a clean tracked .design-harness candidate.', 'DESIGN_CANDIDATE_DIRTY');
+    return { project, revision: head };
+  }
+
+  async acceptDesignUnit(projectId, unitId, { candidateRevision, artifactRefs = [], note } = {}) {
+    assertSafeId(unitId, 'design unit id');
+    await this.assertDesignCandidateRevision(projectId, candidateRevision);
+    const project = await this.resolveProject(projectId);
+    const document = await this.getDesignUnits(projectId);
+    const unit = document.units.find((item) => item.id === unitId);
+    if (!unit) throw new DesignStoreError(`Unknown design unit: ${unitId}.`, 404, 'DESIGN_UNIT_NOT_FOUND');
+    assert(unit.review?.status === 'visual_reviewed', `Design unit ${unitId} must reach visual_reviewed before user acceptance.`, 'DESIGN_UNIT_NOT_VISUALLY_REVIEWED');
+    assert((unit.review.profileIds ?? []).length > 0, `Design unit ${unitId} requires at least one review profile before acceptance.`, 'DESIGN_REVIEW_PROFILE_REQUIRED');
+    const designDigest = await this.designUnitDigest(projectId, unitId);
+    unit.review.acceptance = { acceptedRevision: candidateRevision, designDigest, acceptedAt: new Date().toISOString(), artifactRefs, ...(note ? { note } : {}) };
+    validateDesignUnits(document);
+    await writeJsonAtomic(join(project.storagePath, 'design-units.json'), document);
+    return { unitId, acceptance: structuredClone(unit.review.acceptance), currentDigest: designDigest, current: true };
+  }
+
+  async freezeProjectDesign(projectId, { candidateRevision, artifactRefs = [], note } = {}) {
+    await this.assertDesignCandidateRevision(projectId, candidateRevision);
+    const project = await this.resolveProject(projectId);
+    const document = await this.getDesignUnits(projectId);
+    const unitDigests = [];
+    const validation = await this.validateProject(projectId);
+    assert(validation.ok, `Project design is not valid: ${validation.errors.join(' ')}`, 'DESIGN_FREEZE_VALIDATION_FAILED');
+    for (const unit of document.units) {
+      const acceptance = unit.review?.acceptance;
+      assert(acceptance, `Design unit ${unit.id} has not been user accepted.`, 'DESIGN_UNIT_NOT_ACCEPTED');
+      assert(unit.review?.status === 'visual_reviewed', `Design unit ${unit.id} is not currently visual_reviewed.`, 'DESIGN_UNIT_NOT_VISUALLY_REVIEWED');
+      const digest = await this.designUnitDigest(projectId, unit.id);
+      assert(digest === acceptance.designDigest, `Design unit ${unit.id} changed after acceptance.`, 'DESIGN_ACCEPTANCE_STALE');
+      unitDigests.push({ unitId: unit.id, designDigest: digest, acceptedRevision: acceptance.acceptedRevision });
+    }
+    const profileIds = [...new Set(document.units.flatMap((unit) => unit.review?.profileIds ?? []))].sort();
+    document.freeze = { status: 'frozen', frozenRevision: candidateRevision, frozenAt: new Date().toISOString(), unitDigests: unitDigests.sort((a, b) => a.unitId.localeCompare(b.unitId)), profileIds, artifactRefs, ...(note ? { note } : {}) };
+    validateDesignUnits(document);
+    await writeJsonAtomic(join(project.storagePath, 'design-units.json'), document);
+    return structuredClone(document.freeze);
+  }
+
+  async getDesignReviewStatus(projectId) {
+    const document = await this.getDesignUnits(projectId);
+    const units = [];
+    for (const unit of document.units) {
+      const currentDigest = await this.designUnitDigest(projectId, unit.id);
+      const acceptance = unit.review?.acceptance ?? null;
+      units.push({ unitId: unit.id, reviewStatus: unit.review?.status ?? 'draft', currentDigest, acceptance, acceptanceCurrent: Boolean(acceptance && acceptance.designDigest === currentDigest) });
+    }
+    const digestByUnit = new Map(units.map((unit) => [unit.unitId, unit.currentDigest]));
+    const freezeCurrent = Boolean(document.freeze && document.freeze.unitDigests.length === units.length
+      && document.freeze.unitDigests.every((item) => digestByUnit.get(item.unitId) === item.designDigest));
+    return { schemaVersion: 1, units, freeze: document.freeze ?? null, freezeCurrent };
   }
 
   async migrateProjectStorage(projectId) {
@@ -666,7 +838,11 @@ export class ProjectStore {
       throw new DesignStoreError('design.md cannot downgrade a project from storageVersion 1.1.0 to 1.0.0.', 409, 'DESIGN_MARKDOWN_STORAGE_DOWNGRADE');
     }
     const currentScreens = await this.listScreens(projectId);
-    const designUnits = importedDesignUnits ?? await this.getDesignUnits(projectId);
+    const currentProduct = await this.getProductModel(projectId);
+    const currentDesignUnits = await this.getDesignUnits(projectId);
+    if (currentProduct && product) assertLegacyUserDecisionUnchanged(currentProduct, product);
+    if (importedDesignUnits) assertProtectedDesignEvidenceUnchanged(currentDesignUnits, importedDesignUnits);
+    const designUnits = importedDesignUnits ?? currentDesignUnits;
     const mergedScreens = new Map(currentScreens.map((screen) => [screen.id, screen]));
     for (const screen of importedScreens) mergedScreens.set(screen.id, screen);
 
@@ -717,6 +893,12 @@ export class ProjectStore {
       errors.push(`activeScreenId ${context.project.activeScreenId} does not exist.`);
     }
     const componentMap = new Map(context.components.components.map((component) => [component.name, component]));
+    const interactionPatternMap = new Map((context.product?.patterns ?? []).map((pattern) => [pattern.id, pattern]));
+    for (const pattern of context.product?.patterns ?? []) {
+      if (pattern.status === 'approved' && pattern.canonicalComponent && !componentMap.has(pattern.canonicalComponent)) {
+        errors.push(`Approved interaction pattern ${pattern.id} names unknown canonical component ${pattern.canonicalComponent}.`);
+      }
+    }
     const validateComposition = (screen, nodes, stateId = 'base') => {
       for (const node of nodes) {
         const contract = componentMap.get(node.component);
@@ -734,6 +916,13 @@ export class ProjectStore {
         }
         if (node.variant && !(contract.variants ?? []).some((item) => item.id === node.variant)) errors.push(`${identity} uses unknown ${node.component} variant ${node.variant}.`);
         if (node.state && !(contract.states ?? []).some((item) => item.id === node.state)) errors.push(`${identity} uses unknown ${node.component} state ${node.state}.`);
+        if (node.interactionPatternId) {
+          const pattern = interactionPatternMap.get(node.interactionPatternId);
+          if (!pattern) errors.push(`${identity} references unknown interaction pattern ${node.interactionPatternId}.`);
+          else if (pattern.status === 'approved' && pattern.canonicalComponent && pattern.canonicalComponent !== node.component) {
+            errors.push(`${identity} must use canonical component ${pattern.canonicalComponent} for approved interaction pattern ${pattern.id}; found ${node.component}.`);
+          }
+        }
       }
     };
     for (const screen of context.screens) {
@@ -751,6 +940,25 @@ export class ProjectStore {
       }
     }
     for (const screenId of screenIds) if (!assignedScreens.has(screenId)) warnings.push(`Screen ${screenId} is not assigned to a design unit.`);
+    const usedReviewProfileIds = new Set(context.designUnits.units.flatMap((unit) => unit.review?.profileIds ?? []));
+    for (const profileId of context.designUnits.freeze?.profileIds ?? []) usedReviewProfileIds.add(profileId);
+    for (const profile of context.designUnits.reviewProfiles ?? []) {
+      if (usedReviewProfileIds.has(profile.id) && profile.colorScheme === 'dark' && !context.tokens.colorModes?.dark) errors.push(`Review profile ${profile.id} requests dark mode but tokens.colorModes.dark is not defined.`);
+    }
+    for (const unit of context.designUnits.units) {
+      if (unit.review?.status === 'visual_reviewed') {
+        if ((unit.review.profileIds ?? []).length === 0) errors.push(`Design unit ${unit.id} is visual_reviewed without a review profile.`);
+        if ((unit.review.artifactRefs ?? []).length === 0) errors.push(`Design unit ${unit.id} is visual_reviewed without review artifacts.`);
+      }
+      if (unit.review?.acceptance) {
+        const digest = designUnitDigestFromContext(context, unit.id);
+        if (digest !== unit.review.acceptance.designDigest) warnings.push(`Design unit ${unit.id} changed after human acceptance; acceptance is stale.`);
+      }
+    }
+    if (context.designUnits.freeze) {
+      const currentDigests = new Map(context.designUnits.units.map((unit) => [unit.id, designUnitDigestFromContext(context, unit.id)]));
+      if (!context.designUnits.freeze.unitDigests.every((item) => currentDigests.get(item.unitId) === item.designDigest)) warnings.push('Project design changed after freeze; freeze evidence is stale.');
+    }
     if (!context.product) {
       warnings.push('product.json is missing; this project is legacy visual-only and cannot be promoted to Golden.');
     } else {
@@ -821,13 +1029,21 @@ export class ProjectStore {
       },
     };
     const components = starterComponentContracts();
-    const designUnits = { schemaVersion: 1, units: [{
-      id: 'primary',
-      name: `${name} Primary Design`,
-      screenFamily: 'unclassified',
-      screenIds: ['home'],
-      contractRefs: [],
-    }] };
+    const designUnits = {
+      schemaVersion: 1,
+      reviewProfiles: [
+        { id: 'standard-light', name: 'Standard · Light', viewport: { width: 393, height: 852, safeTop: 54, safeBottom: 30 }, colorScheme: 'light', textScale: 1, contrast: 'standard', reduceMotion: false },
+        { id: 'accessibility-large', name: 'Accessibility · Large Text', viewport: { width: 393, height: 852, safeTop: 54, safeBottom: 30 }, colorScheme: 'light', textScale: 1.6, contrast: 'standard', reduceMotion: false },
+      ],
+      units: [{
+        id: 'primary',
+        name: `${name} Primary Design`,
+        screenFamily: 'unclassified',
+        screenIds: ['home'],
+        contractRefs: [],
+        review: { status: 'draft', profileIds: ['standard-light', 'accessibility-large'], artifactRefs: [], notes: [] },
+      }],
+    };
     const screen = { schemaVersion: 1, id: 'home', name: 'Home', device: 'iphone-16-pro', goal: 'Define the first screen goal.', primaryAction: 'continue', constraints: ['Use registered components and project tokens only.'], nodes: [
       { id: 'header', component: 'ScreenHeader', props: { eyebrow: 'New project', title: name } },
       { id: 'empty', component: 'EmptyState', props: { title: 'Start with a Product Contract', body: 'Define the User Job, full flow, information hierarchy, and interaction semantics before composing screens.' } },

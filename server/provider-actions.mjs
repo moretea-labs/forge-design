@@ -20,6 +20,9 @@ export const providerActions = [
   'design_put_screen',
   'design_get_product_flow',
   'design_put_product_flow',
+  'design_get_review_status',
+  'design_accept_unit',
+  'design_freeze_project',
   'design_migrate_project',
   'design_validate',
   'design_export_markdown',
@@ -70,6 +73,9 @@ export async function executeProviderAction(store, actionId, input = {}) {
       await store.putProductModel(input.project_id, product);
       return structuredClone(findFlow(product, input.flow_id));
     }
+    case 'design_get_review_status': return await store.getDesignReviewStatus(input.project_id);
+    case 'design_accept_unit': return await store.acceptDesignUnit(input.project_id, input.unit_id, { candidateRevision: input.candidate_revision, artifactRefs: input.artifact_refs ?? [], note: input.note });
+    case 'design_freeze_project': return await store.freezeProjectDesign(input.project_id, { candidateRevision: input.candidate_revision, artifactRefs: input.artifact_refs ?? [], note: input.note });
     case 'design_migrate_project': return await store.migrateProjectStorage(input.project_id);
     case 'design_validate': return await store.validateProject(input.project_id);
     case 'design_export_markdown': return { project_id: input.project_id, markdown: await store.exportDesignMarkdown(input.project_id) };

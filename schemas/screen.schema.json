@@ -73,6 +73,10 @@
           "state": {
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "interactionPatternId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
           }
         }
       }
@@ -134,6 +138,18 @@
                 },
                 "props": {
                   "type": "object"
+                },
+                "variant": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "state": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "interactionPatternId": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
                 }
               }
             }

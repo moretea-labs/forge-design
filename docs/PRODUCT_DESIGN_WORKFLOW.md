@@ -169,7 +169,7 @@ A Golden is not only a polished screen. Promotion should produce three linked as
 2. **Screen / Flow Golden** — the validated composition and hierarchy across the representative user journey, not only one screenshot;
 3. **Interaction Pattern Golden** — system patterns such as Search, Filter, Selection, Toggle, Primary Action, Sheet, and destructive actions that have been proven in real product semantics.
 
-A Golden candidate remains a candidate while any high-impact interaction language is unresolved, while the representative flow has not been accepted, or while screenshot evidence has not reached `Captured -> Model Visible -> Visual Reviewed`. Similar data shape, boolean implementation, or visual resemblance is not sufficient evidence that two controls belong to the same reusable pattern.
+A Golden candidate remains a candidate while any high-impact interaction language is unresolved or screenshot evidence has not reached `Captured -> Model Visible -> Visual Reviewed`. Similar data shape, boolean implementation, or visual resemblance is not sufficient evidence that two controls belong to the same reusable pattern. Family-level human acceptance is recorded separately on Design Units after visual review; an AI must not encode its own approval through an ordinary design write.
 
 ## Product Design Brief
 
@@ -201,7 +201,7 @@ For self-contained projects, this brief is repository-native structured state in
 - Interaction Pattern candidates, their validated flows, owner, and sibling evidence;
 - Golden membership and review evidence.
 
-The computed Golden Gate is fail-closed for promotion. `golden.status = approved` is invalid unless the Product Brief is ready, all selected flows are validated, promoted patterns have compatible sibling evidence, runtime artifacts exist, review has reached `visual_reviewed`, and the user decision is `accepted`.
+The embedded Product Golden Gate remains fail-closed compatibility behavior for self-contained/legacy projects. `golden.status = approved` is invalid unless the Product Brief is ready, all selected flows are validated, promoted patterns have compatible sibling evidence, runtime artifacts exist, review has reached `visual_reviewed`, and its legacy user decision is `accepted`. Ordinary current design writes cannot change that legacy user-decision field. New multi-family implementation handoff uses Design Unit acceptance and project freeze instead of treating this embedded gate as a universal approval authority.
 
 Runtime review stages are intentionally distinct:
 
@@ -210,6 +210,12 @@ Runtime review stages are intentionally distinct:
 - **Captured**: a concrete screenshot/runtime artifact exists.
 - **Model Visible**: the reviewer actually received or decoded the pixels. An `image/png` path or artifact candidate alone is not sufficient.
 - **Visual Reviewed**: composition, hierarchy, density, alignment, interaction presentation, and product finish were actually assessed.
-- **User Accepted** is a separate decision and is required for Approved Golden.
+- **Human Accepted** is a separate decision from visual review. For current Design Units it is written only through a strongly confirmed acceptance action against an exact clean Git revision and deterministic design digest.
 
-This prevents test success, screenshot creation, or transport metadata from being mislabeled as visual acceptance. Components and tokens remain downstream implementation contracts.
+### Review Profiles and Design Freeze
+
+Each reviewable Design Unit declares the Review Profiles that materially test its design: viewport/safe area, color scheme, text scale, contrast review mode, and reduced-motion behavior. Profiles are part of the design digest. The Web workspace must actually project those values; a profile name alone is not review evidence. A used dark profile requires dark token overrides. Increased-contrast preview is a design-review aid, not a promise of pixel-identical OS rendering.
+
+After visual review, explicit user acceptance records an exact pre-evidence Git revision plus the unit digest. The acceptance metadata itself is excluded from the digest so committing the evidence does not self-invalidate it. Any later design change that affects the digest makes acceptance stale. The project may be frozen only when every Design Unit has current acceptance and project validation succeeds. This current project freeze is the gate from completed design into production implementation.
+
+This prevents test success, screenshot creation, transport metadata, or an AI-authored `accepted` field from being mislabeled as human approval. Components and tokens remain downstream implementation contracts.

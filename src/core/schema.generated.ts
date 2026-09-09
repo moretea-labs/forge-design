@@ -20,6 +20,10 @@ export type DesignTokens = ({
     "version": string;
   } & Record<string, unknown>);
   "color": Record<string, string>;
+  "colorModes"?: {
+    "light"?: Record<string, string>;
+    "dark"?: Record<string, string>;
+  };
   "spacing": Record<string, number>;
   "radius": Record<string, number>;
   "shadow": Record<string, string>;
@@ -184,6 +188,7 @@ export type ProductDesignModel = {
     "validatedFlowIds": Array<string>;
     "siblingEvidence": Array<string>;
     "owner"?: string;
+    "canonicalComponent"?: string;
   }>;
   "golden": {
     "status": "draft" | "candidate" | "approved";
@@ -213,6 +218,7 @@ export type ScreenSpec = {
     "props"?: Record<string, unknown>;
     "variant"?: string;
     "state"?: string;
+    "interactionPatternId"?: string;
   }>;
   "initialStateId"?: string;
   "states"?: Array<{
@@ -225,12 +231,29 @@ export type ScreenSpec = {
       "id": string;
       "component": string;
       "props"?: Record<string, unknown>;
+      "variant"?: string;
+      "state"?: string;
+      "interactionPatternId"?: string;
     }>;
   }>;
 };
 
 export type DesignUnitsDocument = {
   "schemaVersion": 1;
+  "reviewProfiles"?: Array<{
+    "id": string;
+    "name": string;
+    "viewport": {
+      "width": number;
+      "height": number;
+      "safeTop": number;
+      "safeBottom": number;
+    };
+    "colorScheme": "light" | "dark";
+    "textScale": number;
+    "contrast": "standard" | "increased";
+    "reduceMotion": boolean;
+  }>;
   "units": Array<{
     "id": string;
     "name": string;
@@ -242,5 +265,31 @@ export type DesignUnitsDocument = {
       "section"?: string;
       "anchor"?: string;
     }>;
+    "review"?: {
+      "status": "draft" | "review" | "visual_reviewed" | "rejected";
+      "profileIds": Array<string>;
+      "artifactRefs": Array<string>;
+      "notes": Array<string>;
+      "acceptance"?: {
+        "acceptedRevision": string;
+        "designDigest": string;
+        "acceptedAt": string;
+        "artifactRefs": Array<string>;
+        "note"?: string;
+      };
+    };
   }>;
+  "freeze"?: {
+    "status": "frozen";
+    "frozenRevision": string;
+    "frozenAt": string;
+    "unitDigests": Array<{
+      "unitId": string;
+      "designDigest": string;
+      "acceptedRevision": string;
+    }>;
+    "profileIds": Array<string>;
+    "artifactRefs": Array<string>;
+    "note"?: string;
+  };
 };

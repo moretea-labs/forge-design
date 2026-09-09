@@ -1,9 +1,13 @@
+import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { DesignStoreError, ProjectStore, validateComponents, validateProductModel, validateScreen, validateTokens } from './project-store.mjs';
 import { parseDesignMarkdown, renderDesignMarkdown } from './design-markdown.mjs';
+
+const execFileAsync = promisify(execFile);
 
 async function createFixture() {
   const root = await mkdtemp(join(tmpdir(), 'design-harness-'));
@@ -16,6 +20,40 @@ async function createFixture() {
   });
   await store.initProject({ projectRoot, id: 'fixture', name: 'Fixture' });
   return { root, projectRoot, store };
+}
+
+async function git(projectRoot, args) {
+  const { stdout } = await execFileAsync('git', ['-C', projectRoot, ...args], { encoding: 'utf8' });
+  return stdout.trim();
+}
+
+async function commitDesign(projectRoot, message) {
+  await git(projectRoot, ['add', '.design-harness']);
+  await git(projectRoot, ['commit', '-m', message]);
+  return git(projectRoot, ['rev-parse', 'HEAD']);
+}
+
+async function seedLegacyProduct(projectRoot, product) {
+  validateProductModel(product);
+  await writeFile(join(projectRoot, '.design-harness', 'product.json'), JSON.stringify(product, null, 2) + '\n', 'utf8');
+}
+
+async function createReviewCandidate() {
+  const fixture = await createFixture();
+  await git(fixture.projectRoot, ['init']);
+  await git(fixture.projectRoot, ['config', 'user.email', 'forge-design-test@example.invalid']);
+  await git(fixture.projectRoot, ['config', 'user.name', 'Forge Design Test']);
+  await commitDesign(fixture.projectRoot, 'initial design');
+  const units = await fixture.store.getDesignUnits('fixture');
+  units.units[0].review = {
+    status: 'visual_reviewed',
+    profileIds: ['standard-light'],
+    artifactRefs: ['artifact://home-standard-light'],
+    notes: ['Reviewed representative Home state.'],
+  };
+  await fixture.store.putDesignUnits('fixture', units);
+  const candidateRevision = await commitDesign(fixture.projectRoot, 'visual review candidate');
+  return { ...fixture, candidateRevision };
 }
 
 describe('ProjectStore', () => {
@@ -196,13 +234,13 @@ describe('ProjectStore product-design model', () => {
   });
 
   it('does not equate screenshot capture with model-visible or visual review', async () => {
-    const { store } = await createFixture();
+    const { store, projectRoot } = await createFixture();
     const product = await store.getProductModel('fixture');
     product.brief.status = 'ready';
     product.flows[0].status = 'validated';
     product.golden.status = 'approved';
     product.golden.review = { stage: 'captured', userDecision: 'accepted', artifactRefs: ['controller-artifacts/screenshot.png'], notes: [] };
-    await store.putProductModel('fixture', product);
+    await seedLegacyProduct(projectRoot, product);
     const validation = await store.validateProject('fixture');
     expect(validation.ok).toBe(false);
     expect(validation.goldenGate.runtimeEvidenceReady).toBe(true);
@@ -212,20 +250,20 @@ describe('ProjectStore product-design model', () => {
   });
 
   it('requires flow validation, runtime evidence, visual review, and user acceptance before Approved Golden', async () => {
-    const { store } = await createFixture();
+    const { store, projectRoot } = await createFixture();
     const product = await store.getProductModel('fixture');
     product.brief.status = 'ready';
     product.flows[0].status = 'validated';
     product.golden.status = 'approved';
     product.golden.review = { stage: 'visual_reviewed', userDecision: 'accepted', artifactRefs: ['controller-artifacts/review.png'], notes: ['Reviewed rendered output.'] };
-    await store.putProductModel('fixture', product);
+    await seedLegacyProduct(projectRoot, product);
     const validation = await store.validateProject('fixture');
     expect(validation.ok).toBe(true);
     expect(validation.goldenGate).toMatchObject({ productContractReady: true, flowReady: true, runtimeEvidenceReady: true, runtimeReviewStage: 'visual_reviewed', userDecision: 'accepted', canApprove: true });
   });
 
   it('requires sibling evidence before an Interaction Pattern can participate in Approved Golden', async () => {
-    const { store } = await createFixture();
+    const { store, projectRoot } = await createFixture();
     const product = await store.getProductModel('fixture');
     product.brief.status = 'ready';
     product.flows[0].status = 'validated';
@@ -234,12 +272,12 @@ describe('ProjectStore product-design model', () => {
     product.golden.patternIds = ['filter-selection'];
     product.golden.status = 'approved';
     product.golden.review = { stage: 'visual_reviewed', userDecision: 'accepted', artifactRefs: ['controller-artifacts/review.png'], notes: [] };
-    await store.putProductModel('fixture', product);
+    await seedLegacyProduct(projectRoot, product);
     let validation = await store.validateProject('fixture');
     expect(validation.ok).toBe(false);
     expect(validation.goldenGate.interactionPatternsReady).toBe(false);
     product.patterns[0].siblingEvidence = ['settings-filter-sibling'];
-    await store.putProductModel('fixture', product);
+    await seedLegacyProduct(projectRoot, product);
     validation = await store.validateProject('fixture');
     expect(validation.ok).toBe(true);
     expect(validation.goldenGate.interactionPatternsReady).toBe(true);
@@ -333,7 +371,7 @@ describe('ProjectStore screen state and transition flow semantics', () => {
   });
 
   it('does not treat a legacy screenIds-only flow as Golden-ready', async () => {
-    const { store } = await createFixture();
+    const { store, projectRoot } = await createFixture();
     const product = await store.getProductModel('fixture');
     product.brief.status = 'ready';
     product.flows[0].status = 'validated';
@@ -341,7 +379,7 @@ describe('ProjectStore screen state and transition flow semantics', () => {
     delete product.flows[0].transitions;
     product.golden.status = 'approved';
     product.golden.review = { stage: 'visual_reviewed', userDecision: 'accepted', artifactRefs: ['controller-artifacts/review.png'], notes: [] };
-    await store.putProductModel('fixture', product);
+    await seedLegacyProduct(projectRoot, product);
     const validation = await store.validateProject('fixture');
     expect(validation.goldenGate.flowReady).toBe(false);
     expect(validation.goldenGate.canApprove).toBe(false);
@@ -373,5 +411,98 @@ describe('ProjectStore typed component and declarative preview semantics', () =>
     expect(validation.ok).toBe(false);
     expect(validation.errors.join(' ')).toContain('does not match type string');
     expect(validation.errors.join(' ')).toContain('unknown PrimaryAction variant missing');
+  });
+});
+
+
+describe('ProjectStore review profile rendering authority', () => {
+  it('requires dark token overrides only when a dark Review Profile is actually used', async () => {
+    const { store } = await createFixture();
+    const units = await store.getDesignUnits('fixture');
+    units.reviewProfiles.push({ id: 'dark-unused', name: 'Dark unused', viewport: { width: 393, height: 852, safeTop: 54, safeBottom: 30 }, colorScheme: 'dark', textScale: 1, contrast: 'standard', reduceMotion: false });
+    await store.putDesignUnits('fixture', units);
+    expect((await store.validateProject('fixture')).errors.join(' ')).not.toContain('dark mode');
+
+    units.units[0].review.profileIds.push('dark-unused');
+    await store.putDesignUnits('fixture', units);
+    let validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.join(' ')).toContain('tokens.colorModes.dark');
+
+    const designTokens = await store.getTokens('fixture');
+    designTokens.colorModes = { dark: { screenBackground: '#111111', textPrimary: '#f4f4f4' } };
+    await store.putTokens('fixture', designTokens);
+    validation = await store.validateProject('fixture');
+    expect(validation.errors.join(' ')).not.toContain('tokens.colorModes.dark');
+  });
+});
+
+describe('ProjectStore human acceptance and freeze authority', () => {
+  it('protects acceptance evidence from ordinary design writes', async () => {
+    const { store } = await createFixture();
+    const units = await store.getDesignUnits('fixture');
+    units.units[0].review = {
+      status: 'visual_reviewed',
+      profileIds: ['standard-light'],
+      artifactRefs: ['artifact://home'],
+      notes: [],
+      acceptance: {
+        acceptedRevision: 'a'.repeat(40),
+        designDigest: 'b'.repeat(64),
+        acceptedAt: new Date().toISOString(),
+        artifactRefs: [],
+      },
+    };
+    await expect(store.putDesignUnits('fixture', units)).rejects.toMatchObject({ code: 'DESIGN_ACCEPTANCE_PROTECTED' });
+
+    const product = await store.getProductModel('fixture');
+    product.golden.review.userDecision = 'accepted';
+    await expect(store.putProductModel('fixture', product)).rejects.toMatchObject({ code: 'DESIGN_USER_DECISION_PROTECTED' });
+  });
+
+  it('records human acceptance against a clean exact revision without self-invalidating its digest', async () => {
+    const { store, projectRoot, candidateRevision } = await createReviewCandidate();
+    const beforeDigest = await store.designUnitDigest('fixture', 'primary');
+    const accepted = await store.acceptDesignUnit('fixture', 'primary', {
+      candidateRevision,
+      artifactRefs: ['artifact://review/home'],
+      note: 'Accepted after visual review.',
+    });
+    expect(accepted).toMatchObject({ unitId: 'primary', current: true });
+    expect(accepted.acceptance.acceptedRevision).toBe(candidateRevision);
+    expect(accepted.acceptance.designDigest).toBe(beforeDigest);
+    expect(await store.designUnitDigest('fixture', 'primary')).toBe(beforeDigest);
+    const review = await store.getDesignReviewStatus('fixture');
+    expect(review.units[0]).toMatchObject({ unitId: 'primary', acceptanceCurrent: true, currentDigest: beforeDigest });
+    expect((await git(projectRoot, ['status', '--porcelain=v1', '--', '.design-harness'])).length).toBeGreaterThan(0);
+  });
+
+  it('marks acceptance stale after design changes and refuses project freeze until re-accepted', async () => {
+    const { store, projectRoot, candidateRevision } = await createReviewCandidate();
+    await store.acceptDesignUnit('fixture', 'primary', { candidateRevision, artifactRefs: ['artifact://review/home'] });
+    await commitDesign(projectRoot, 'record design acceptance');
+
+    const home = await store.getScreen('fixture', 'home');
+    home.goal = 'Changed after acceptance.';
+    await store.putScreen('fixture', home);
+    const changedRevision = await commitDesign(projectRoot, 'change accepted design');
+    const status = await store.getDesignReviewStatus('fixture');
+    expect(status.units[0].acceptanceCurrent).toBe(false);
+    await expect(store.freezeProjectDesign('fixture', { candidateRevision: changedRevision })).rejects.toMatchObject({ code: 'DESIGN_ACCEPTANCE_STALE' });
+  });
+
+  it('freezes a fully accepted current design against the post-acceptance candidate revision', async () => {
+    const { store, projectRoot, candidateRevision } = await createReviewCandidate();
+    const accepted = await store.acceptDesignUnit('fixture', 'primary', { candidateRevision, artifactRefs: ['artifact://review/home'] });
+    const freezeCandidate = await commitDesign(projectRoot, 'record design acceptance');
+    const freeze = await store.freezeProjectDesign('fixture', {
+      candidateRevision: freezeCandidate,
+      artifactRefs: ['artifact://whole-app-review'],
+      note: 'Ready for implementation handoff.',
+    });
+    expect(freeze).toMatchObject({ status: 'frozen', frozenRevision: freezeCandidate });
+    expect(freeze.unitDigests).toEqual([{ unitId: 'primary', designDigest: accepted.acceptance.designDigest, acceptedRevision: candidateRevision }]);
+    const status = await store.getDesignReviewStatus('fixture');
+    expect(status.freezeCurrent).toBe(true);
   });
 });

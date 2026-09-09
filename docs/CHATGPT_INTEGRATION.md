@@ -16,7 +16,8 @@ Before composing UI, follow the product-design workflow in [`PRODUCT_DESIGN_WORK
 7. For portable batch editing, export `design.md` with `npm run --silent design -- export-design-md --project <id> --file /tmp/design.md`. Format v2 includes Design Units; format v1 remains readable for backward compatibility.
 8. Import an edited Markdown transport with `npm run --silent design -- import-design-md --project <id> --file /tmp/design.md` or `PUT /api/design/projects/<id>/design.md` using `text/markdown`.
 9. Prefer granular Forge provider actions for ordinary ChatGPT design work: read/write Design Units, tokens, component contracts, individual Screen Specs, and individual Product Flows. These actions always target a registered `project_id` plus semantic asset ids; they do not accept repository file paths and they dispatch through the canonical ProjectStore validators. Use full `design.md` import/export only for deliberate portable batch transport.
-10. Render and review the real design screen states and relevant transition paths, validate sibling consistency, then validate the project and review the resulting granular JSON Git diff.
+10. Render and review the real design screen states under every Review Profile required by the current Design Unit, including text-scale and reduced-motion projections and any declared dark color mode. Validate sibling consistency, then validate the project and review the resulting granular JSON Git diff.
+11. Read `design_get_review_status` before handoff. Human acceptance is never inferred from ChatGPT confidence or a successful validation. After the user explicitly accepts a visually reviewed family, `design_accept_unit` requires Forge strong confirmation and an exact clean candidate Git revision. After every family has current acceptance, `design_freeze_project` requires a second strong confirmation and records the project-wide Phase D handoff freeze.
 
 The context payload contains manifest/storage migration state, Design Units, embedded Product Design Model, computed Golden Gate, tokens, components, and independent screens. It is transport-independent and intentionally contains no browser-only state.
 
@@ -35,8 +36,10 @@ npm run --silent design -- validate --project metronome
 
 The browser's “Copy ChatGPT context” action calls the same context endpoint. This prevents prompt context, visual rendering, and repository state from drifting apart.
 
-## Golden promotion gate
+## Review and implementation handoff
 
-Do not approve or promote a Golden from a single attractive screen. `design_validate` computes the existing project-wide promotion gate from the embedded Product Design Model. Approved Golden requires a ready Product Brief, validated Golden flow, sibling-validated Interaction Patterns when promoted, concrete runtime evidence, `visual_reviewed`, and explicit user acceptance. `Captured` only means an artifact exists; `Model Visible` means the reviewer actually received the pixels; neither may be silently upgraded to `Visual Reviewed`.
+The embedded Product Golden gate is retained for compatibility with self-contained projects and remains fail-closed: `Captured` only means an artifact exists; `Model Visible` means the reviewer actually received the pixels; neither may be silently upgraded to `Visual Reviewed`. Its legacy `userDecision` field is protected from ordinary writes and is not the family-aware implementation-handoff authority.
 
-Per-Design-Unit approval/freeze is intentionally a later P0-E capability. Until then, Design Units organize and pin design authority without pretending the current project-wide Golden gate is already family-aware.
+For current multi-family design work, Design Units own review lifecycle and Review Profiles. Ordinary `design.write` actions may edit design state but cannot add/change acceptance or freeze evidence. `design_accept_unit` requires `confirmation=strong_confirmation`, exact confirmation text `accept-design-unit`, a visually reviewed unit, concrete review profiles/artifacts, a clean `.design-harness`, and `candidate_revision == HEAD`. Acceptance stores the exact revision plus a deterministic design digest; later design changes make it stale.
+
+`design_freeze_project` requires strong confirmation text `freeze-design-project`, successful project validation, and current acceptance for every Design Unit. Only a current whole-project freeze is Phase D implementation-handoff authority. ChatGPT must never claim a family or project is accepted merely because tests pass, the Web preview renders, or it believes the design is good.

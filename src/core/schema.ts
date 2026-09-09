@@ -24,6 +24,19 @@ export type ProductInformationRole = ProductDesignModel['brief']['informationHie
 export type ProductPriority = ProductDesignModel['brief']['informationHierarchy'][number]['priority'];
 export type ProductReviewStage = ProductDesignModel['golden']['review']['stage'];
 export type DesignUnit = DesignUnitsDocument['units'][number];
+export type DesignReviewProfile = NonNullable<DesignUnitsDocument['reviewProfiles']>[number];
+export type DesignReviewStatus = {
+  schemaVersion: 1;
+  units: Array<{
+    unitId: string;
+    reviewStatus: 'draft' | 'review' | 'visual_reviewed' | 'rejected';
+    currentDigest: string;
+    acceptance: NonNullable<DesignUnit['review']>['acceptance'] | null;
+    acceptanceCurrent: boolean;
+  }>;
+  freeze: NonNullable<DesignUnitsDocument['freeze']> | null;
+  freezeCurrent: boolean;
+};
 export type ProductContractRef = DesignUnit['contractRefs'][number];
 
 export type ProductGoldenGate = {

@@ -33,6 +33,10 @@ describe('Forge provider granular design actions', () => {
     const putFlow = registration.actions.find((action) => action.actionId === 'design_put_product_flow');
     expect(putFlow.argumentsSchema.properties.flow.required).toContain('id');
     expect(putFlow.argumentsSchema.properties.flow.properties.transitions.type).toBe('array');
+    const acceptUnit = registration.actions.find((action) => action.actionId === 'design_accept_unit');
+    expect(acceptUnit).toMatchObject({ confirmation: 'strong_confirmation', requiredConfirmationText: 'accept-design-unit' });
+    const freezeProject = registration.actions.find((action) => action.actionId === 'design_freeze_project');
+    expect(freezeProject).toMatchObject({ confirmation: 'strong_confirmation', requiredConfirmationText: 'freeze-design-project' });
   });
 
   it('reads repository-native assets without accepting path-shaped targets', async () => {
@@ -41,6 +45,8 @@ describe('Forge provider granular design actions', () => {
     expect(screen.id).toBe('home');
     const units = await executeProviderAction(store, 'design_get_design_units', { project_id: 'fixture' });
     expect(units.units[0].screenIds).toContain('home');
+    const review = await executeProviderAction(store, 'design_get_review_status', { project_id: 'fixture' });
+    expect(review.units[0]).toMatchObject({ unitId: 'primary', reviewStatus: 'draft', acceptanceCurrent: false });
     const tokens = await executeProviderAction(store, 'design_get_tokens', { project_id: 'fixture' });
     expect(tokens.schemaVersion).toBe(1);
   });

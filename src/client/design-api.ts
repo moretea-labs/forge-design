@@ -1,4 +1,4 @@
-import type { ComponentContractsDocument, DesignProjectContext, DesignProjectPaths, DesignProjectSummary, DesignTokens, ProductDesignModel, ScreenSpec } from '../core/schema';
+import type { ComponentContractsDocument, DesignProjectContext, DesignProjectPaths, DesignProjectSummary, DesignReviewStatus, DesignTokens, ProductDesignModel, ScreenSpec } from '../core/schema';
 
 type ApiErrorPayload = { error?: { code?: string; message?: string } };
 
@@ -21,6 +21,7 @@ export const designApi = {
   },
   getContext: (projectId: string) => request<DesignProjectContext>(projectPath(projectId, '/context')),
   getPaths: (projectId: string) => request<DesignProjectPaths>(projectPath(projectId, '/paths')),
+  getReviewStatus: (projectId: string) => request<DesignReviewStatus>(projectPath(projectId, '/review-status')),
   validate: (projectId: string) => request<{ ok: boolean; projectId: string; errors: string[]; warnings: string[]; goldenGate: DesignProjectContext['goldenGate'] }>(projectPath(projectId, '/validate')),
   putProduct: (projectId: string, product: ProductDesignModel) => request<ProductDesignModel>(projectPath(projectId, '/product'), { method: 'PUT', body: JSON.stringify(product) }),
   putTokens: (projectId: string, tokens: DesignTokens) => request<DesignTokens>(projectPath(projectId, '/tokens'), { method: 'PUT', body: JSON.stringify(tokens) }),

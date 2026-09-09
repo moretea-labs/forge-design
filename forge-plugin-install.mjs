@@ -16,6 +16,10 @@ const embedded = (schema) => {
 const projectId = { type:'string', pattern:'^[a-z0-9][a-z0-9_-]*$' };
 const screenId = { type:'string', pattern:'^[a-z0-9][a-z0-9_-]*$' };
 const flowId = { type:'string', pattern:'^[a-z0-9][a-z0-9_-]*$' };
+const unitId = { type:'string', pattern:'^[a-z0-9][a-z0-9_-]*$' };
+const exactRevision = { type:'string', pattern:'^[0-9a-f]{40,64}$' };
+const artifactRefs = { type:'array', items:{ type:'string', minLength:1 }, default:[] };
+const optionalNote = { type:'string', minLength:1 };
 const tokensDocument = embedded(loadSchema('tokens'));
 const componentsDocument = embedded(loadSchema('components'));
 const designUnitsDocument = embedded(loadSchema('design-units'));
@@ -30,6 +34,7 @@ const writeClaim = [{ resource: 'repo-state', mode: 'write' }];
 const objectArgs = (properties, required = Object.keys(properties)) => ({ type:'object', properties, required, additionalProperties:false });
 const readAction = (actionId, title, description, argumentsSchema) => ({ actionId, title, description, readOnly:true, risk:'readonly', confirmation:'none', defaultTimeoutMs:10000, cancellable:true, idempotent:true, scopes:['design.read'], resourceClaims:[], argumentsSchema });
 const writeAction = (actionId, title, description, argumentsSchema, timeout = 10000, idempotent = false) => ({ actionId, title, description, readOnly:false, risk:'workspace_write', confirmation:'authorization', defaultTimeoutMs:timeout, cancellable:true, idempotent, scopes:['design.write'], resourceClaims:writeClaim, argumentsSchema });
+const strongWriteAction = (actionId, title, description, requiredConfirmationText, argumentsSchema, timeout = 10000) => ({ actionId, title, description, readOnly:false, risk:'workspace_write', confirmation:'strong_confirmation', requiredConfirmationText, defaultTimeoutMs:timeout, cancellable:true, idempotent:false, scopes:['design.write'], resourceClaims:writeClaim, argumentsSchema });
 const projectArgs = objectArgs({ project_id:projectId });
 
 const actions = [
@@ -50,6 +55,9 @@ const actions = [
   writeAction('design_put_screen','Put screen','Validate and atomically replace one Screen Spec whose id matches screen_id.',objectArgs({project_id:projectId,screen_id:screenId,screen:screenDocument})),
   readAction('design_get_product_flow','Get product flow','Read one transition-based Product Flow from canonical product.json.',objectArgs({project_id:projectId,flow_id:flowId})),
   writeAction('design_put_product_flow','Put product flow','Validate and upsert one Product Flow inside canonical product.json without creating a second flow authority.',objectArgs({project_id:projectId,flow_id:flowId,flow:flowDocument})),
+  readAction('design_get_review_status','Get design review status','Read per-Design-Unit review state, current design digests, acceptance currency and project freeze currency.',projectArgs),
+  strongWriteAction('design_accept_unit','Accept Design Unit','Record human acceptance evidence for one visually reviewed Design Unit at an exact clean Git revision.','accept-design-unit',objectArgs({project_id:projectId,unit_id:unitId,candidate_revision:exactRevision,artifact_refs:artifactRefs,note:optionalNote},['project_id','unit_id','candidate_revision'])),
+  strongWriteAction('design_freeze_project','Freeze design project','Freeze the whole design only after every Design Unit has current human acceptance evidence at an exact clean Git revision.','freeze-design-project',objectArgs({project_id:projectId,candidate_revision:exactRevision,artifact_refs:artifactRefs,note:optionalNote},['project_id','candidate_revision'])),
   writeAction('design_migrate_project','Migrate design storage','Explicitly migrate a readable legacy Forge Design project to the current storage version.',projectArgs,10000,true),
   readAction('design_validate','Validate design project','Validate one Forge Design project and return structured findings.',projectArgs),
   readAction('design_export_markdown','Export design.md','Export one registered design project as portable deterministic design.md.',projectArgs),

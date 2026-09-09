@@ -4,38 +4,296 @@
   "title": "Forge Design design units",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "units"],
+  "required": [
+    "schemaVersion",
+    "units"
+  ],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": {
+      "const": 1
+    },
+    "reviewProfiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "viewport",
+          "colorScheme",
+          "textScale",
+          "contrast",
+          "reduceMotion"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "viewport": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "width",
+              "height",
+              "safeTop",
+              "safeBottom"
+            ],
+            "properties": {
+              "width": {
+                "type": "number",
+                "minimum": 1
+              },
+              "height": {
+                "type": "number",
+                "minimum": 1
+              },
+              "safeTop": {
+                "type": "number",
+                "minimum": 0
+              },
+              "safeBottom": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          },
+          "colorScheme": {
+            "enum": [
+              "light",
+              "dark"
+            ]
+          },
+          "textScale": {
+            "type": "number",
+            "minimum": 0.8,
+            "maximum": 2.5
+          },
+          "contrast": {
+            "enum": [
+              "standard",
+              "increased"
+            ]
+          },
+          "reduceMotion": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
     "units": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "screenFamily", "screenIds", "contractRefs"],
+        "required": [
+          "id",
+          "name",
+          "screenFamily",
+          "screenIds",
+          "contractRefs"
+        ],
         "properties": {
-          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
-          "name": { "type": "string", "minLength": 1 },
-          "screenFamily": { "type": "string", "minLength": 1 },
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "screenFamily": {
+            "type": "string",
+            "minLength": 1
+          },
           "screenIds": {
             "type": "array",
             "uniqueItems": true,
-            "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" }
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9_-]*$"
+            }
           },
           "contractRefs": {
             "type": "array",
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["revision", "path"],
+              "required": [
+                "revision",
+                "path"
+              ],
               "properties": {
-                "revision": { "type": "string", "pattern": "^[0-9a-f]{7,64}$" },
-                "path": { "type": "string", "minLength": 1 },
-                "section": { "type": "string", "minLength": 1 },
-                "anchor": { "type": "string", "minLength": 1 }
+                "revision": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{7,64}$"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "section": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "anchor": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "review": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "profileIds",
+              "artifactRefs",
+              "notes"
+            ],
+            "properties": {
+              "status": {
+                "enum": [
+                  "draft",
+                  "review",
+                  "visual_reviewed",
+                  "rejected"
+                ]
+              },
+              "profileIds": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                }
+              },
+              "artifactRefs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "acceptance": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "acceptedRevision",
+                  "designDigest",
+                  "acceptedAt",
+                  "artifactRefs"
+                ],
+                "properties": {
+                  "acceptedRevision": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{40,64}$"
+                  },
+                  "designDigest": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$"
+                  },
+                  "acceptedAt": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "artifactRefs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "note": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
               }
             }
           }
+        }
+      }
+    },
+    "freeze": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "frozenRevision",
+        "frozenAt",
+        "unitDigests",
+        "profileIds",
+        "artifactRefs"
+      ],
+      "properties": {
+        "status": {
+          "const": "frozen"
+        },
+        "frozenRevision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$"
+        },
+        "frozenAt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unitDigests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "unitId",
+              "designDigest",
+              "acceptedRevision"
+            ],
+            "properties": {
+              "unitId": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              },
+              "designDigest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "acceptedRevision": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40,64}$"
+              }
+            }
+          }
+        },
+        "profileIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          }
+        },
+        "artifactRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
         }
       }
     }
