@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "checks": {
+    "design-validate": {
+      "description": "Validate Forge Design repository-native schemas and sample design system assets.",
+      "command": ["npm", "run", "validate:design"],
+      "timeoutMs": 120000
+    },
+    "design-typecheck": {
+      "description": "Validate generated schema types and TypeScript application types.",
+      "command": ["npm", "run", "typecheck"],
+      "timeoutMs": 120000
+    },
+    "design-test": {
+      "description": "Run focused Forge Design Vitest coverage for model, store, API, and review behavior.",
+      "command": ["npm", "test"],
+      "timeoutMs": 180000
+    },
+    "design-build": {
+      "description": "Run the complete Forge Design validation, typecheck, and Vite production build gate.",
+      "command": ["npm", "run", "build"],
+      "timeoutMs": 180000
+    }
+  }
+}
