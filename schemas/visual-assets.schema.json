@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forge.moretea-labs.dev/design/visual-assets.schema.json",
+  "title": "Forge Design visual assets",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "assets"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "role", "mediaType", "provenance"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+          "name": { "type": "string", "minLength": 1 },
+          "role": { "enum": ["reference", "design_artboard", "runtime_evidence"] },
+          "mediaType": { "enum": ["image/png", "image/jpeg", "image/webp", "image/svg+xml"] },
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "path"],
+            "properties": {
+              "kind": { "enum": ["repository_path", "git_revision"] },
+              "path": { "type": "string", "minLength": 1 },
+              "revision": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" }
+            }
+          },
+          "binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "designUnitId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+              "screenId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+              "stateId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+              "profileId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" }
+            }
+          },
+          "dimensions": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["width", "height"],
+            "properties": {
+              "width": { "type": "number", "minimum": 1 },
+              "height": { "type": "number", "minimum": 1 }
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

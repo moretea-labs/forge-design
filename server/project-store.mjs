@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { homedir } from 'node:os';
-import { basename, delimiter, dirname, join, resolve } from 'node:path';
+import { basename, delimiter, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DesignMarkdownError, parseDesignMarkdown, renderDesignMarkdown } from './design-markdown.mjs';
 import { SchemaValidationError, loadCanonicalSchema, validateCanonicalDocument } from './schema-validator.mjs';
@@ -15,6 +15,7 @@ export const defaultProjectRegistryPath = join(homedir(), '.forge-design', 'proj
 export const storageDirectoryName = '.design-harness';
 const idPattern = /^[a-z0-9][a-z0-9_-]*$/;
 const maxDocumentBytes = 2 * 1024 * 1024;
+const maxVisualAssetBytes = 64 * 1024 * 1024;
 const transactionMarkerName = '.forge-design-transaction.json';
 const activeTransactionIds = new Set();
 const execFileAsync = promisify(execFile);
@@ -251,6 +252,46 @@ export function validateDesignUnits(document) {
   return document;
 }
 
+function assertRepositoryRelativeAssetPath(value) {
+  assert(typeof value === 'string' && value.trim().length > 0, 'Visual asset path must be a non-empty repository-relative path.', 'VISUAL_ASSET_PATH_INVALID');
+  assert(!value.startsWith('/') && !value.includes('\\') && !value.split('/').some((segment) => segment === '..' || segment === '.' || segment.length === 0),
+    'Visual asset path must stay inside the repository: ' + value + '.', 'VISUAL_ASSET_PATH_INVALID');
+  return value;
+}
+
+export function validateVisualAssets(document) {
+  validateSchema('visual-assets', document);
+  const ids = new Set();
+  for (const asset of document.assets) {
+    assert(!ids.has(asset.id), 'Duplicate visual asset id: ' + asset.id + '.', 'DUPLICATE_VISUAL_ASSET_ID');
+    ids.add(asset.id);
+    assertRepositoryRelativeAssetPath(asset.provenance.path);
+    if (asset.provenance.kind === 'git_revision') {
+      assert(typeof asset.provenance.revision === 'string', 'Visual asset ' + asset.id + ' requires an exact Git revision.', 'VISUAL_ASSET_REVISION_REQUIRED');
+    } else {
+      assert(asset.provenance.revision === undefined, 'Current-path visual asset ' + asset.id + ' cannot carry a historical revision.', 'VISUAL_ASSET_REVISION_FORBIDDEN');
+    }
+    if (asset.role === 'design_artboard') {
+      assert(asset.provenance.kind === 'repository_path', 'Design artboard ' + asset.id + ' must use current repository_path provenance.', 'DESIGN_ARTBOARD_PROVENANCE_INVALID');
+      assert(asset.provenance.path.startsWith('.design-harness/artboards/'), 'Design artboard ' + asset.id + ' must live under .design-harness/artboards/.', 'DESIGN_ARTBOARD_PATH_INVALID');
+      assert(Boolean(asset.binding?.screenId), 'Design artboard ' + asset.id + ' must bind to a screen.', 'DESIGN_ARTBOARD_SCREEN_REQUIRED');
+    }
+    if (asset.binding?.stateId) assert(Boolean(asset.binding.screenId), 'Visual asset ' + asset.id + ' state binding requires screenId.', 'VISUAL_ASSET_STATE_SCREEN_REQUIRED');
+  }
+  return document;
+}
+
+function assertVisualAssetRolesUnchanged(before, after) {
+  const beforeRoles = new Map(before.assets.map((asset) => [asset.id, asset.role]));
+  for (const asset of after.assets) {
+    if (beforeRoles.has(asset.id)) {
+      assert(beforeRoles.get(asset.id) === asset.role,
+        'Visual asset ' + asset.id + ' role is immutable; create a new asset id instead of changing ' + beforeRoles.get(asset.id) + ' to ' + asset.role + '.',
+        'VISUAL_ASSET_ROLE_IMMUTABLE');
+    }
+  }
+}
+
 function stableValue(value) {
   if (Array.isArray(value)) return value.map(stableValue);
   if (isObject(value)) return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
@@ -263,6 +304,34 @@ function stableJson(value) {
 
 function sha256(value) {
   return createHash('sha256').update(stableJson(value)).digest('hex');
+}
+
+function sha256Bytes(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+async function resolveVisualAssetStatus(project, document) {
+  const statuses = [];
+  for (const asset of document.assets) {
+    try {
+      let bytes;
+      if (asset.provenance.kind === 'git_revision') {
+        const objectRef = asset.provenance.revision + ':' + asset.provenance.path;
+        const result = await execFileAsync('git', ['-C', project.root, 'show', objectRef], { encoding: 'buffer', maxBuffer: maxVisualAssetBytes });
+        bytes = result.stdout;
+      } else {
+        const absolutePath = resolve(project.root, asset.provenance.path);
+        const repositoryRelative = relative(project.root, absolutePath);
+        assert(repositoryRelative !== '..' && !repositoryRelative.startsWith('../'), 'Visual asset ' + asset.id + ' escapes the repository.', 'VISUAL_ASSET_PATH_INVALID');
+        bytes = await readFile(absolutePath);
+      }
+      assert(bytes.length <= maxVisualAssetBytes, 'Visual asset ' + asset.id + ' exceeds the 64 MiB review limit.', 'VISUAL_ASSET_TOO_LARGE');
+      statuses.push({ assetId: asset.id, role: asset.role, present: true, contentSha256: sha256Bytes(bytes), error: null });
+    } catch (error) {
+      statuses.push({ assetId: asset.id, role: asset.role, present: false, contentSha256: null, error: error.code ?? error.message ?? 'VISUAL_ASSET_UNAVAILABLE' });
+    }
+  }
+  return statuses;
 }
 
 function protectedDesignEvidence(document) {
@@ -308,10 +377,16 @@ function designUnitDigestFromContext(context, unitId) {
   for (const screen of screens) for (const patternId of screenPatternIds(screen)) patternIds.add(patternId);
   for (const pattern of context.product?.patterns ?? []) if ((pattern.validatedFlowIds ?? []).some((id) => flowIds.has(id))) patternIds.add(pattern.id);
   const reviewProfileIds = new Set(unit.review?.profileIds ?? []);
+  const statusByAsset = new Map((context.visualAssetStatus ?? []).map((item) => [item.assetId, item]));
+  const designArtboards = (context.visualAssets?.assets ?? [])
+    .filter((asset) => asset.role === 'design_artboard' && (asset.binding?.designUnitId === unitId || screenIds.has(asset.binding?.screenId)))
+    .map((asset) => ({ asset, contentSha256: statusByAsset.get(asset.id)?.contentSha256 ?? null }))
+    .sort((a, b) => a.asset.id.localeCompare(b.asset.id));
   const payload = {
     schemaVersion: 1,
     unit: { id: unit.id, name: unit.name, screenFamily: unit.screenFamily, screenIds: [...unit.screenIds].sort(), contractRefs: unit.contractRefs },
     reviewProfiles: (context.designUnits.reviewProfiles ?? []).filter((profile) => reviewProfileIds.has(profile.id)).sort((a, b) => a.id.localeCompare(b.id)),
+    designArtboards,
     tokens: context.tokens,
     components: context.components,
     screens,
@@ -423,6 +498,53 @@ function productReferenceErrors(product, screens) {
   for (const screenId of product.golden.screenIds) if (!screenIds.has(screenId)) errors.push(`Golden references unknown screen ${screenId}.`);
   for (const flowId of product.golden.flowIds) if (!flowIds.has(flowId)) errors.push(`Golden references unknown flow ${flowId}.`);
   for (const patternId of product.golden.patternIds) if (!patternIds.has(patternId)) errors.push(`Golden references unknown pattern ${patternId}.`);
+  return errors;
+}
+
+function visualAssetReferenceErrors(visualAssets, designUnits, screens) {
+  const errors = [];
+  const unitMap = new Map(designUnits.units.map((unit) => [unit.id, unit]));
+  const screenMap = new Map(screens.map((screen) => [screen.id, screen]));
+  const profileIds = new Set((designUnits.reviewProfiles ?? []).map((profile) => profile.id));
+  const ownersByScreen = new Map();
+  for (const unit of designUnits.units) {
+    for (const screenId of unit.screenIds) {
+      const owners = ownersByScreen.get(screenId) ?? [];
+      owners.push(unit.id);
+      ownersByScreen.set(screenId, owners);
+    }
+  }
+
+  for (const asset of visualAssets.assets) {
+    const binding = asset.binding ?? {};
+    if (binding.designUnitId && !unitMap.has(binding.designUnitId)) {
+      errors.push('Visual asset ' + asset.id + ' references unknown design unit ' + binding.designUnitId + '.');
+    }
+    const screen = binding.screenId ? screenMap.get(binding.screenId) : null;
+    if (binding.screenId && !screen) {
+      errors.push('Visual asset ' + asset.id + ' references unknown screen ' + binding.screenId + '.');
+    }
+    if (screen && binding.stateId && !screenStateIds(screen).has(binding.stateId)) {
+      errors.push('Visual asset ' + asset.id + ' references unknown state ' + binding.stateId + ' on screen ' + binding.screenId + '.');
+    }
+    if (binding.profileId && !profileIds.has(binding.profileId)) {
+      errors.push('Visual asset ' + asset.id + ' references unknown review profile ' + binding.profileId + '.');
+    }
+    if (binding.designUnitId && binding.screenId) {
+      const unit = unitMap.get(binding.designUnitId);
+      if (unit && !unit.screenIds.includes(binding.screenId)) {
+        errors.push('Visual asset ' + asset.id + ' binds screen ' + binding.screenId + ' outside design unit ' + binding.designUnitId + '.');
+      }
+    }
+    if (asset.role === 'design_artboard' && binding.screenId) {
+      const owners = ownersByScreen.get(binding.screenId) ?? [];
+      if (owners.length !== 1) {
+        errors.push('Design artboard ' + asset.id + ' requires screen ' + binding.screenId + ' to belong to exactly one design unit; found ' + owners.length + '.');
+      } else if (binding.designUnitId && owners[0] !== binding.designUnitId) {
+        errors.push('Design artboard ' + asset.id + ' design unit binding does not own screen ' + binding.screenId + '.');
+      }
+    }
+  }
   return errors;
 }
 
@@ -668,6 +790,7 @@ export class ProjectStore {
       screens: join(project.storagePath, 'screens'),
       product: join(project.storagePath, 'product.json'),
       designUnits: join(project.storagePath, 'design-units.json'),
+      visualAssets: join(project.storagePath, 'visual-assets.json'),
     };
   }
 
@@ -740,6 +863,28 @@ export class ProjectStore {
     const current = await this.getDesignUnits(projectId);
     assertProtectedDesignEvidenceUnchanged(current, document);
     await writeJsonAtomic(join(project.storagePath, 'design-units.json'), document);
+    return structuredClone(document);
+  }
+
+  async getVisualAssets(projectId) {
+    const project = await this.resolveProject(projectId);
+    const path = join(project.storagePath, 'visual-assets.json');
+    if (await pathExists(path)) return validateVisualAssets(await readJson(path));
+    if (project.manifest.storageVersion === currentStorageVersion) {
+      throw new DesignStoreError('visual-assets.json is required for storageVersion ' + currentStorageVersion + '.', 400, 'VISUAL_ASSETS_MISSING');
+    }
+    return validateVisualAssets({ schemaVersion: 1, assets: [] });
+  }
+
+  async putVisualAssets(projectId, document) {
+    validateVisualAssets(document);
+    const project = await this.resolveProject(projectId);
+    if (project.manifest.storageVersion !== currentStorageVersion) {
+      throw new DesignStoreError('Project ' + projectId + ' uses storageVersion ' + project.manifest.storageVersion + '; migrate to ' + currentStorageVersion + ' before writing visual assets.', 409, 'STORAGE_MIGRATION_REQUIRED');
+    }
+    const current = await this.getVisualAssets(projectId);
+    assertVisualAssetRolesUnchanged(current, document);
+    await writeJsonAtomic(join(project.storagePath, 'visual-assets.json'), document);
     return structuredClone(document);
   }
 
@@ -856,17 +1001,21 @@ export class ProjectStore {
     if (project.manifest.storageVersion === currentStorageVersion) {
       return { projectId, fromVersion: currentStorageVersion, toVersion: currentStorageVersion, changed: false };
     }
-    if (project.manifest.storageVersion !== '1.0.0') {
-      throw new DesignStoreError(`Unsupported migration from ${project.manifest.storageVersion}.`, 400, 'STORAGE_MIGRATION_UNSUPPORTED');
+    const fromVersion = project.manifest.storageVersion;
+    if (!['1.0.0', '1.1.0'].includes(fromVersion)) {
+      throw new DesignStoreError('Unsupported migration from ' + fromVersion + '.', 400, 'STORAGE_MIGRATION_UNSUPPORTED');
     }
     const designUnits = await this.getDesignUnits(projectId);
+    const visualAssets = validateVisualAssets({ schemaVersion: 1, assets: [] });
     const nextManifest = { ...project.manifest, storageVersion: currentStorageVersion };
     validateProjectManifest(nextManifest);
     await this.publishStorageTransaction(project, async (stageStoragePath) => {
-      await writeJsonAtomic(join(stageStoragePath, 'design-units.json'), designUnits);
+      if (fromVersion === '1.0.0') await writeJsonAtomic(join(stageStoragePath, 'design-units.json'), designUnits);
+      await writeJsonAtomic(join(stageStoragePath, 'visual-assets.json'), visualAssets);
+      await mkdir(join(stageStoragePath, 'artboards'), { recursive: true });
       await writeJsonAtomic(join(stageStoragePath, 'project.json'), nextManifest);
     });
-    return { projectId, fromVersion: '1.0.0', toVersion: currentStorageVersion, changed: true, designUnits };
+    return { projectId, fromVersion, toVersion: currentStorageVersion, changed: true, designUnits, visualAssets };
   }
 
   async listScreens(projectId) {
@@ -911,13 +1060,15 @@ export class ProjectStore {
 
   async getContext(projectId) {
     const project = await this.resolveProject(projectId);
-    const [tokens, components, screens, product, designUnits] = await Promise.all([
+    const [tokens, components, screens, product, designUnits, visualAssets] = await Promise.all([
       this.getTokens(projectId),
       this.getComponents(projectId),
       this.listScreens(projectId),
       this.getProductModel(projectId),
       this.getDesignUnits(projectId),
+      this.getVisualAssets(projectId),
     ]);
+    const visualAssetStatus = await resolveVisualAssetStatus(project, visualAssets);
     return {
       schemaVersion: 1,
       project: structuredClone(project.manifest),
@@ -936,6 +1087,8 @@ export class ProjectStore {
       screens,
       product,
       designUnits,
+      visualAssets,
+      visualAssetStatus,
       goldenGate: evaluateGoldenGate(product, screens),
     };
   }
@@ -961,17 +1114,23 @@ export class ProjectStore {
     const components = validateComponents(bundle.components);
     const product = bundle.product == null ? null : validateProductModel(bundle.product);
     const importedDesignUnits = bundle.designUnits == null ? null : validateDesignUnits(bundle.designUnits);
+    const importedVisualAssets = bundle.visualAssets == null ? null : validateVisualAssets(bundle.visualAssets);
     const importedScreens = bundle.screens.map((screen) => validateScreen(screen, screen.id));
     const project = await this.resolveProject(projectId);
-    if (project.manifest.storageVersion === currentStorageVersion && manifest.storageVersion === '1.0.0') {
-      throw new DesignStoreError('design.md cannot downgrade a project from storageVersion 1.1.0 to 1.0.0.', 409, 'DESIGN_MARKDOWN_STORAGE_DOWNGRADE');
+    const currentVersionIndex = supportedStorageVersions.indexOf(project.manifest.storageVersion);
+    const importedVersionIndex = supportedStorageVersions.indexOf(manifest.storageVersion);
+    if (importedVersionIndex < currentVersionIndex) {
+      throw new DesignStoreError('design.md cannot downgrade a project from storageVersion ' + project.manifest.storageVersion + ' to ' + manifest.storageVersion + '.', 409, 'DESIGN_MARKDOWN_STORAGE_DOWNGRADE');
     }
     const currentScreens = await this.listScreens(projectId);
     const currentProduct = await this.getProductModel(projectId);
     const currentDesignUnits = await this.getDesignUnits(projectId);
+    const currentVisualAssets = await this.getVisualAssets(projectId);
     if (currentProduct && product) assertLegacyUserDecisionUnchanged(currentProduct, product);
     if (importedDesignUnits) assertProtectedDesignEvidenceUnchanged(currentDesignUnits, importedDesignUnits);
+    if (importedVisualAssets) assertVisualAssetRolesUnchanged(currentVisualAssets, importedVisualAssets);
     const designUnits = importedDesignUnits ?? currentDesignUnits;
+    const visualAssets = importedVisualAssets ?? currentVisualAssets;
     const mergedScreens = new Map(currentScreens.map((screen) => [screen.id, screen]));
     for (const screen of importedScreens) mergedScreens.set(screen.id, screen);
 
@@ -994,6 +1153,8 @@ export class ProjectStore {
         if (!mergedScreenIds.has(screenId)) throw new DesignStoreError(`Design unit ${unit.id} references unknown screen ${screenId}.`, 400, 'DESIGN_MARKDOWN_DESIGN_UNIT_REFERENCE_INVALID');
       }
     }
+    const visualAssetErrors = visualAssetReferenceErrors(visualAssets, designUnits, [...mergedScreens.values()]);
+    if (visualAssetErrors.length) throw new DesignStoreError(visualAssetErrors[0], 400, 'DESIGN_MARKDOWN_VISUAL_ASSET_REFERENCE_INVALID');
 
     await this.publishStorageTransaction(project, async (stageStoragePath) => {
       await writeJsonAtomic(join(stageStoragePath, 'project.json'), manifest);
@@ -1001,6 +1162,7 @@ export class ProjectStore {
       await writeJsonAtomic(join(stageStoragePath, 'components.json'), components);
       if (product) await writeJsonAtomic(join(stageStoragePath, 'product.json'), product);
       if (importedDesignUnits) await writeJsonAtomic(join(stageStoragePath, 'design-units.json'), designUnits);
+      if (importedVisualAssets) await writeJsonAtomic(join(stageStoragePath, 'visual-assets.json'), visualAssets);
       for (const screen of importedScreens) {
         await writeJsonAtomic(join(stageStoragePath, 'screens', `${screen.id}.json`), screen);
       }
@@ -1071,6 +1233,10 @@ export class ProjectStore {
       }
     }
     for (const screenId of screenIds) if (!assignedScreens.has(screenId)) warnings.push(`Screen ${screenId} is not assigned to a design unit.`);
+    errors.push(...visualAssetReferenceErrors(context.visualAssets, context.designUnits, context.screens));
+    for (const status of context.visualAssetStatus) {
+      if (!status.present) errors.push('Visual asset ' + status.assetId + ' cannot be resolved from its declared provenance: ' + status.error + '.');
+    }
     const usedReviewProfileIds = new Set(context.designUnits.units.flatMap((unit) => unit.review?.profileIds ?? []));
     for (const profileId of context.designUnits.freeze?.profileIds ?? []) usedReviewProfileIds.add(profileId);
     for (const profile of context.designUnits.reviewProfiles ?? []) {
@@ -1175,6 +1341,7 @@ export class ProjectStore {
         review: { status: 'draft', profileIds: ['standard-light', 'accessibility-large'], artifactRefs: [], notes: [] },
       }],
     };
+    const visualAssets = { schemaVersion: 1, assets: [] };
     const screen = { schemaVersion: 1, id: 'home', name: 'Home', device: 'iphone-16-pro', goal: 'Define the first screen goal.', primaryAction: 'continue', constraints: ['Use registered components and project tokens only.'], nodes: [
       { id: 'header', component: 'ScreenHeader', props: { eyebrow: 'New project', title: name } },
       { id: 'empty', component: 'EmptyState', props: { title: 'Start with a Product Contract', body: 'Define the User Job, full flow, information hierarchy, and interaction semantics before composing screens.' } },
@@ -1185,6 +1352,7 @@ export class ProjectStore {
     validateComponents(components);
     validateProductModel(product);
     validateDesignUnits(designUnits);
+    validateVisualAssets(visualAssets);
     validateScreen(screen, 'home');
     const temporaryStoragePath = join(root, `.design-harness-${randomUUID()}.tmp`);
     await mkdir(root, { recursive: true });
@@ -1194,6 +1362,8 @@ export class ProjectStore {
       await writeJsonAtomic(join(temporaryStoragePath, 'components.json'), components);
       await writeJsonAtomic(join(temporaryStoragePath, 'product.json'), product);
       await writeJsonAtomic(join(temporaryStoragePath, 'design-units.json'), designUnits);
+      await writeJsonAtomic(join(temporaryStoragePath, 'visual-assets.json'), visualAssets);
+      await mkdir(join(temporaryStoragePath, 'artboards'), { recursive: true });
       await writeJsonAtomic(join(temporaryStoragePath, 'screens', 'home.json'), screen);
       await writeFile(join(temporaryStoragePath, 'README.md'), '# `.design-harness`\n\nCanonical Git-tracked design assets for this repository.\n', 'utf8');
       await rename(temporaryStoragePath, storagePath);

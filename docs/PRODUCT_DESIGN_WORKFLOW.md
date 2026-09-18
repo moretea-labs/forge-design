@@ -137,6 +137,21 @@ Only after product hierarchy and interaction are stable should the workflow choo
 
 Tokens enforce implementation consistency. They cannot rescue an incorrect product model, information hierarchy, or interaction flow.
 
+### Visual authority layers
+
+Forge Design must not collapse product semantics, visual composition, historical references, and implementation evidence into one Mock Screen.
+
+The design-to-implementation chain is:
+
+1. **Product Contract** — User Job, domain meaning, journey, states, interactions and ownership.
+2. **Semantic Design Model** — Design Units, Screens/States/Flows, component contracts and tokens.
+3. **High-fidelity Design Artboard** — the current visual composition for a bound Screen/State/Review Profile. This is the visual authority reviewed during Phase C.
+4. **Reference / Runtime Evidence** — historical designs, inspiration and production/simulator captures. They can be compared against the current artboard but never become design authority merely because they exist.
+5. **Human Acceptance + Design Freeze** — only current accepted artboards and semantic design at an exact revision may cross into implementation.
+
+Typed component previews remain useful for semantic/component inspection, but a generic preview tree is not a substitute for a real high-fidelity page design. Tool implementation source must never be the storage location for a product's design; product designs live in the target repository and survive Forge Design upgrades independently.
+
+
 ## 9. Evidence and review
 
 Static code validation is not visual acceptance. For a user-visible redesign, review the real rendered product and, where relevant, the interaction path.

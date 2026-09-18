@@ -12,6 +12,7 @@ const mappings = [
   ['product', 'ProductDesignModel'],
   ['screen', 'ScreenSpec'],
   ['design-units', 'DesignUnitsDocument'],
+  ['visual-assets', 'VisualAssetsDocument'],
 ];
 
 function literal(value) {

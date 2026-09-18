@@ -1,5 +1,5 @@
-const FORMAT_VERSION = 2;
-const SUPPORTED_FORMAT_VERSIONS = new Set([1, 2]);
+const FORMAT_VERSION = 3;
+const SUPPORTED_FORMAT_VERSIONS = new Set([1, 2, 3]);
 const FORMAT_MARKER = `<!-- design-harness-format:${FORMAT_VERSION} -->`;
 const MAX_MARKDOWN_BYTES = 16 * 1024 * 1024;
 
@@ -34,6 +34,7 @@ export function renderDesignMarkdown(context) {
   ];
   if (context.product) parts.push('', jsonSection('product', 'Product Contract', context.product).trimEnd());
   if (context.designUnits) parts.push('', jsonSection('design-units', 'Design Units', context.designUnits).trimEnd());
+  if (context.visualAssets) parts.push('', jsonSection('visual-assets', 'Visual Assets', context.visualAssets).trimEnd());
   parts.push(
     '',
     jsonSection('tokens', 'Design Tokens', context.tokens).trimEnd(),
@@ -82,7 +83,7 @@ export function parseDesignMarkdown(markdown) {
 
   const screens = [];
   for (const [key, document] of sections) {
-    if (key === 'project' || key === 'product' || key === 'design-units' || key === 'tokens' || key === 'components') continue;
+    if (key === 'project' || key === 'product' || key === 'design-units' || key === 'visual-assets' || key === 'tokens' || key === 'components') continue;
     if (!key.startsWith('screen:') || key.length === 'screen:'.length) {
       throw new DesignMarkdownError(`Unknown design.md section: ${key}.`, 'DESIGN_MARKDOWN_UNKNOWN_SECTION');
     }
@@ -99,6 +100,7 @@ export function parseDesignMarkdown(markdown) {
     project: sections.get('project'),
     product: sections.get('product') ?? null,
     designUnits: sections.get('design-units') ?? null,
+    visualAssets: sections.get('visual-assets') ?? null,
     tokens: sections.get('tokens'),
     components: sections.get('components'),
     screens,

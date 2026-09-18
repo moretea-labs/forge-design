@@ -3,6 +3,7 @@ export type {
   DesignProjectManifest,
   DesignTokens,
   DesignUnitsDocument,
+  VisualAssetsDocument,
   ProductDesignModel,
   ScreenSpec,
 } from './schema.generated';
@@ -12,6 +13,7 @@ import type {
   DesignProjectManifest,
   DesignTokens,
   DesignUnitsDocument,
+  VisualAssetsDocument,
   ProductDesignModel,
   ScreenSpec,
 } from './schema.generated';
@@ -24,6 +26,7 @@ export type ProductInformationRole = ProductDesignModel['brief']['informationHie
 export type ProductPriority = ProductDesignModel['brief']['informationHierarchy'][number]['priority'];
 export type ProductReviewStage = ProductDesignModel['golden']['review']['stage'];
 export type DesignUnit = DesignUnitsDocument['units'][number];
+export type VisualAsset = VisualAssetsDocument['assets'][number];
 export type DesignReviewProfile = NonNullable<DesignUnitsDocument['reviewProfiles']>[number];
 export type DesignReviewStatus = {
   schemaVersion: 1;
@@ -37,6 +40,14 @@ export type DesignReviewStatus = {
   freeze: NonNullable<DesignUnitsDocument['freeze']> | null;
   freezeCurrent: boolean;
 };
+export type VisualAssetStatus = {
+  assetId: string;
+  role: VisualAsset['role'];
+  present: boolean;
+  contentSha256: string | null;
+  error: string | null;
+};
+
 export type ProductContractRef = DesignUnit['contractRefs'][number];
 
 export type ProductGoldenGate = {
@@ -88,6 +99,8 @@ export type DesignProjectContext = {
   screens: ScreenSpec[];
   product: ProductDesignModel | null;
   designUnits: DesignUnitsDocument;
+  visualAssets: VisualAssetsDocument;
+  visualAssetStatus: VisualAssetStatus[];
   goldenGate: ProductGoldenGate;
 };
 
@@ -100,6 +113,7 @@ export type DesignProjectPaths = {
   screens: string;
   product: string;
   designUnits: string;
+  visualAssets: string;
 };
 
 export type ScreenStateVariant = NonNullable<ScreenSpec['states']>[number];

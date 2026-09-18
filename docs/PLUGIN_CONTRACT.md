@@ -11,7 +11,9 @@ Every target repository owns a tracked `.design-harness/` directory. The browser
 - `design-units.json`: multiple design families, their Screen Family/screen membership, and pinned upstream Product Contract references;
 - `tokens.json`: the only design-token source of truth;
 - `components.json`: typed semantic component contracts ChatGPT may compose, including optional project-owned declarative preview trees; Forge core must not require business-specific renderer code for each component;
-- `screens/<screen-id>.json`: one independent Screen identity per file, including its state variants when present.
+- `screens/<screen-id>.json`: one independent Screen identity per file, including its state variants when present;
+- `visual-assets.json`: role/provenance/binding manifest for visual references, current high-fidelity design artboards, and runtime evidence;
+- `artboards/**`: repository-owned current high-fidelity visual design files. Their file bytes, not merely manifest metadata, participate in Design Unit acceptance digests.
 
 No browser database or generated source mirror is authoritative. `schemas/*.schema.json` is the one structural model authority; runtime validation and generated TypeScript document types consume that authority rather than redefining the persisted model.
 
@@ -29,6 +31,7 @@ The official external provider is `design`. `design_get_context` returns Design 
 
 1. Repository access, authorization, and execution evidence belong to Forge/provider integration.
 2. Structural validation comes from canonical JSON Schemas; cross-asset design semantics and lint belong to the core/store.
-3. Rendering and temporary editor state belong to the web application.
-4. Production application source mutation is a separate explicit capability and review step.
+3. Semantic component previews and temporary editor state belong to the web application, but they are not automatically high-fidelity visual authority.
+4. High-fidelity visual authority is a bound `design_artboard`; historical/reference and runtime artifacts remain evidence even when visually similar.
+5. Production application source mutation is a separate explicit capability and review step.
 5. Git remains responsible for review, history, branching, merge, and rollback. Multi-file design imports/migrations additionally use the repository-native storage transaction so a provider crash cannot leave mixed-version canonical assets.

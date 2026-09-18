@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { DesignStoreError, ProjectStore, validateComponents, validateProductModel, validateScreen, validateTokens } from './project-store.mjs';
+import { DesignStoreError, ProjectStore, validateComponents, validateProductModel, validateScreen, validateTokens, validateVisualAssets } from './project-store.mjs';
 import { parseDesignMarkdown, renderDesignMarkdown } from './design-markdown.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -176,13 +176,16 @@ describe('ProjectStore bundle transaction recovery', () => {
 });
 
 describe('ProjectStore storage migration and design units', () => {
-  it('initializes storageVersion 1.1.0 with canonical design units', async () => {
+  it('initializes storageVersion 1.2.0 with canonical design units and visual assets', async () => {
     const { store, projectRoot } = await createFixture();
-    expect((await store.getManifest('fixture')).storageVersion).toBe('1.1.0');
+    expect((await store.getManifest('fixture')).storageVersion).toBe('1.2.0');
     const units = await store.getDesignUnits('fixture');
     expect(units.units).toEqual([expect.objectContaining({ id: 'primary', screenIds: ['home'] })]);
     const persisted = JSON.parse(await readFile(join(projectRoot, '.design-harness', 'design-units.json'), 'utf8'));
     expect(persisted).toEqual(units);
+    const visualAssets = await store.getVisualAssets('fixture');
+    expect(visualAssets).toEqual({ schemaVersion: 1, assets: [] });
+    expect(JSON.parse(await readFile(join(projectRoot, '.design-harness', 'visual-assets.json'), 'utf8'))).toEqual(visualAssets);
   });
 
   it('reads storageVersion 1.0.0 without mutating it, then migrates explicitly', async () => {
@@ -196,16 +199,37 @@ describe('ProjectStore storage migration and design units', () => {
     await rm(designUnitsPath);
 
     const context = await store.getContext('fixture');
-    expect(context.storage).toMatchObject({ storageVersion: '1.0.0', currentStorageVersion: '1.1.0', migrationRequired: true });
+    expect(context.storage).toMatchObject({ storageVersion: '1.0.0', currentStorageVersion: '1.2.0', migrationRequired: true });
     expect(context.designUnits.units[0]).toMatchObject({ id: 'legacy-default', screenIds: ['home'] });
     await expect(readFile(designUnitsPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(store.putDesignUnits('fixture', context.designUnits)).rejects.toMatchObject({ code: 'STORAGE_MIGRATION_REQUIRED' });
 
     const migration = await store.migrateProjectStorage('fixture');
-    expect(migration).toMatchObject({ changed: true, fromVersion: '1.0.0', toVersion: '1.1.0' });
-    expect((await store.getManifest('fixture')).storageVersion).toBe('1.1.0');
+    expect(migration).toMatchObject({ changed: true, fromVersion: '1.0.0', toVersion: '1.2.0' });
+    expect((await store.getManifest('fixture')).storageVersion).toBe('1.2.0');
     expect(JSON.parse(await readFile(designUnitsPath, 'utf8'))).toEqual(context.designUnits);
     expect((await store.getContext('fixture')).storage.migrationRequired).toBe(false);
+  });
+
+  it('reads storageVersion 1.1.0 without visual assets and migrates it explicitly', async () => {
+    const { store, projectRoot } = await createFixture();
+    const harness = join(projectRoot, '.design-harness');
+    const manifestPath = join(harness, 'project.json');
+    const visualAssetsPath = join(harness, 'visual-assets.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    manifest.storageVersion = '1.1.0';
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+    await rm(visualAssetsPath);
+
+    const context = await store.getContext('fixture');
+    expect(context.storage).toMatchObject({ storageVersion: '1.1.0', currentStorageVersion: '1.2.0', migrationRequired: true });
+    expect(context.visualAssets).toEqual({ schemaVersion: 1, assets: [] });
+    await expect(store.putVisualAssets('fixture', context.visualAssets)).rejects.toMatchObject({ code: 'STORAGE_MIGRATION_REQUIRED' });
+
+    const migration = await store.migrateProjectStorage('fixture');
+    expect(migration).toMatchObject({ changed: true, fromVersion: '1.1.0', toVersion: '1.2.0' });
+    expect((await store.getManifest('fixture')).storageVersion).toBe('1.2.0');
+    expect(JSON.parse(await readFile(visualAssetsPath, 'utf8'))).toEqual({ schemaVersion: 1, assets: [] });
   });
 
   it('reports design units that reference unknown screens', async () => {
@@ -357,10 +381,11 @@ describe('ProjectStore design.md transport', () => {
   it('round-trips the canonical Design Model through deterministic Markdown and imports validated edits', async () => {
     const { store } = await createFixture();
     const exported = await store.exportDesignMarkdown('fixture');
-    expect(exported).toContain('<!-- design-harness-format:2 -->');
+    expect(exported).toContain('<!-- design-harness-format:3 -->');
     expect(exported).toContain('```json design-harness:project');
     expect(exported).toContain('```json design-harness:product');
     expect(exported).toContain('```json design-harness:design-units');
+    expect(exported).toContain('```json design-harness:visual-assets');
     expect(exported).toContain('```json design-harness:screen:home');
 
     const bundle = parseDesignMarkdown(exported);
@@ -383,13 +408,28 @@ describe('ProjectStore design.md transport', () => {
     const { store } = await createFixture();
     const beforeUnits = await store.getDesignUnits('fixture');
     let legacy = await store.exportDesignMarkdown('fixture');
-    legacy = legacy.replace('<!-- design-harness-format:2 -->', '<!-- design-harness-format:1 -->');
+    legacy = legacy.replace('<!-- design-harness-format:3 -->', '<!-- design-harness-format:1 -->');
     legacy = legacy.replace(/\n## Design Units\n\n```json design-harness:design-units\n[\s\S]*?\n```/, '');
+    legacy = legacy.replace(/\n## Visual Assets\n\n```json design-harness:visual-assets\n[\s\S]*?\n```/, '');
     const parsed = parseDesignMarkdown(legacy);
     expect(parsed.schemaVersion).toBe(1);
     expect(parsed.designUnits).toBeNull();
+    expect(parsed.visualAssets).toBeNull();
     await store.importDesignMarkdown('fixture', legacy);
     expect(await store.getDesignUnits('fixture')).toEqual(beforeUnits);
+  });
+
+  it('parses legacy format v2 without visual assets and preserves current visual assets on import', async () => {
+    const { store } = await createFixture();
+    const beforeAssets = await store.getVisualAssets('fixture');
+    let legacy = await store.exportDesignMarkdown('fixture');
+    legacy = legacy.replace('<!-- design-harness-format:3 -->', '<!-- design-harness-format:2 -->');
+    legacy = legacy.replace(/\n## Visual Assets\n\n```json design-harness:visual-assets\n[\s\S]*?\n```/, '');
+    const parsed = parseDesignMarkdown(legacy);
+    expect(parsed.schemaVersion).toBe(2);
+    expect(parsed.visualAssets).toBeNull();
+    await store.importDesignMarkdown('fixture', legacy);
+    expect(await store.getVisualAssets('fixture')).toEqual(beforeAssets);
   });
 
   it('fails before persistence when design.md attempts to change project identity', async () => {
@@ -503,6 +543,108 @@ describe('ProjectStore review profile rendering authority', () => {
     await store.putTokens('fixture', designTokens);
     validation = await store.validateProject('fixture');
     expect(validation.errors.join(' ')).not.toContain('tokens.colorModes.dark');
+  });
+});
+
+describe('ProjectStore visual authority assets', () => {
+  it('keeps visual roles immutable and resolves exact historical provenance', async () => {
+    const { store, projectRoot } = await createFixture();
+    await git(projectRoot, ['init']);
+    await git(projectRoot, ['config', 'user.email', 'forge-design-test@example.invalid']);
+    await git(projectRoot, ['config', 'user.name', 'Forge Design Test']);
+    await writeFile(join(projectRoot, 'historical-home.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><text>historical</text></svg>', 'utf8');
+    await git(projectRoot, ['add', 'historical-home.svg', '.design-harness']);
+    await git(projectRoot, ['commit', '-m', 'historical visual']);
+    const historicalRevision = await git(projectRoot, ['rev-parse', 'HEAD']);
+
+    await mkdir(join(projectRoot, '.design-harness', 'artboards'), { recursive: true });
+    await writeFile(join(projectRoot, '.design-harness', 'artboards', 'home.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><text>artboard</text></svg>', 'utf8');
+    const assets = {
+      schemaVersion: 1,
+      assets: [
+        {
+          id: 'old-home',
+          name: 'Historical Home',
+          role: 'reference',
+          mediaType: 'image/svg+xml',
+          provenance: { kind: 'git_revision', revision: historicalRevision, path: 'historical-home.svg' },
+          binding: { designUnitId: 'primary', screenId: 'home' },
+        },
+        {
+          id: 'home-artboard',
+          name: 'Home Artboard',
+          role: 'design_artboard',
+          mediaType: 'image/svg+xml',
+          provenance: { kind: 'repository_path', path: '.design-harness/artboards/home.svg' },
+          binding: { designUnitId: 'primary', screenId: 'home', stateId: 'normal', profileId: 'standard-light' },
+        },
+      ],
+    };
+    await store.putVisualAssets('fixture', assets);
+    const context = await store.getContext('fixture');
+    expect(context.visualAssetStatus).toHaveLength(2);
+    expect(context.visualAssetStatus.every((item) => item.present && item.contentSha256)).toBe(true);
+    expect((await store.validateProject('fixture')).ok).toBe(true);
+
+    const changedRole = structuredClone(assets);
+    changedRole.assets[0].role = 'runtime_evidence';
+    await expect(store.putVisualAssets('fixture', changedRole)).rejects.toMatchObject({ code: 'VISUAL_ASSET_ROLE_IMMUTABLE' });
+    expect(() => validateVisualAssets({
+      schemaVersion: 1,
+      assets: [{ id: 'bad-history', name: 'Bad', role: 'reference', mediaType: 'image/png', provenance: { kind: 'git_revision', path: 'missing.png' } }],
+    })).toThrow(DesignStoreError);
+  });
+
+  it('fails closed when visual bindings point at an unknown state or profile', async () => {
+    const { store, projectRoot } = await createFixture();
+    await mkdir(join(projectRoot, '.design-harness', 'artboards'), { recursive: true });
+    await writeFile(join(projectRoot, '.design-harness', 'artboards', 'home.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>', 'utf8');
+    await store.putVisualAssets('fixture', {
+      schemaVersion: 1,
+      assets: [{
+        id: 'broken-artboard',
+        name: 'Broken Artboard',
+        role: 'design_artboard',
+        mediaType: 'image/svg+xml',
+        provenance: { kind: 'repository_path', path: '.design-harness/artboards/home.svg' },
+        binding: { designUnitId: 'primary', screenId: 'home', stateId: 'missing-state', profileId: 'missing-profile' },
+      }],
+    });
+    const validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.join(' ')).toContain('unknown state missing-state');
+    expect(validation.errors.join(' ')).toContain('unknown review profile missing-profile');
+  });
+
+  it('includes current design-artboard bytes in acceptance digest but excludes reference/runtime evidence bytes', async () => {
+    const { store, projectRoot } = await createReviewCandidate();
+    const harness = join(projectRoot, '.design-harness');
+    await mkdir(join(harness, 'artboards'), { recursive: true });
+    await mkdir(join(harness, 'evidence'), { recursive: true });
+    const artboardPath = join(harness, 'artboards', 'home.svg');
+    const referencePath = join(harness, 'evidence', 'home-reference.svg');
+    const runtimePath = join(harness, 'evidence', 'home-runtime.svg');
+    await writeFile(artboardPath, '<svg xmlns="http://www.w3.org/2000/svg"><text>design-v1</text></svg>', 'utf8');
+    await writeFile(referencePath, '<svg xmlns="http://www.w3.org/2000/svg"><text>reference-v1</text></svg>', 'utf8');
+    await writeFile(runtimePath, '<svg xmlns="http://www.w3.org/2000/svg"><text>runtime-v1</text></svg>', 'utf8');
+    await store.putVisualAssets('fixture', {
+      schemaVersion: 1,
+      assets: [
+        { id: 'home-design', name: 'Home Design', role: 'design_artboard', mediaType: 'image/svg+xml', provenance: { kind: 'repository_path', path: '.design-harness/artboards/home.svg' }, binding: { designUnitId: 'primary', screenId: 'home', profileId: 'standard-light' } },
+        { id: 'home-reference', name: 'Home Reference', role: 'reference', mediaType: 'image/svg+xml', provenance: { kind: 'repository_path', path: '.design-harness/evidence/home-reference.svg' }, binding: { designUnitId: 'primary', screenId: 'home' } },
+        { id: 'home-runtime', name: 'Home Runtime', role: 'runtime_evidence', mediaType: 'image/svg+xml', provenance: { kind: 'repository_path', path: '.design-harness/evidence/home-runtime.svg' }, binding: { designUnitId: 'primary', screenId: 'home' } },
+      ],
+    });
+    const candidateRevision = await commitDesign(projectRoot, 'visual artboard candidate');
+    await store.acceptDesignUnit('fixture', 'primary', { candidateRevision, artifactRefs: ['visual://home-design'] });
+    const acceptedDigest = (await store.getDesignReviewStatus('fixture')).units[0].currentDigest;
+
+    await writeFile(referencePath, '<svg xmlns="http://www.w3.org/2000/svg"><text>reference-v2</text></svg>', 'utf8');
+    await writeFile(runtimePath, '<svg xmlns="http://www.w3.org/2000/svg"><text>runtime-v2</text></svg>', 'utf8');
+    expect((await store.getDesignReviewStatus('fixture')).units[0]).toMatchObject({ acceptanceCurrent: true, currentDigest: acceptedDigest });
+
+    await writeFile(artboardPath, '<svg xmlns="http://www.w3.org/2000/svg"><text>design-v2</text></svg>', 'utf8');
+    expect((await store.getDesignReviewStatus('fixture')).units[0].acceptanceCurrent).toBe(false);
   });
 });
 

@@ -5,7 +5,7 @@ export type DesignProjectManifest = {
   "schemaVersion": 1;
   "id": string;
   "name": string;
-  "storageVersion": "1.0.0" | "1.1.0";
+  "storageVersion": "1.0.0" | "1.1.0" | "1.2.0";
   "designSystem": {
     "name": string;
     "version": string;
@@ -292,4 +292,30 @@ export type DesignUnitsDocument = {
     "artifactRefs": Array<string>;
     "note"?: string;
   };
+};
+
+export type VisualAssetsDocument = {
+  "schemaVersion": 1;
+  "assets": Array<{
+    "id": string;
+    "name": string;
+    "role": "reference" | "design_artboard" | "runtime_evidence";
+    "mediaType": "image/png" | "image/jpeg" | "image/webp" | "image/svg+xml";
+    "provenance": {
+      "kind": "repository_path" | "git_revision";
+      "path": string;
+      "revision"?: string;
+    };
+    "binding"?: {
+      "designUnitId"?: string;
+      "screenId"?: string;
+      "stateId"?: string;
+      "profileId"?: string;
+    };
+    "dimensions"?: {
+      "width": number;
+      "height": number;
+    };
+    "notes"?: Array<string>;
+  }>;
 };

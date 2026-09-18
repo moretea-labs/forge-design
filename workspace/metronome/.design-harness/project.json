@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "metronome",
   "name": "Metronome Practice",
-  "storageVersion": "1.1.0",
+  "storageVersion": "1.2.0",
   "designSystem": {
     "name": "Calm Precision",
     "version": "0.1.0"

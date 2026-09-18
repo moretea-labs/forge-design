@@ -10,6 +10,9 @@ Forge Design does not own project design data. Each target repository owns one t
     ├── design-units.json
     ├── tokens.json
     ├── components.json
+    ├── visual-assets.json
+    ├── artboards/
+    │   └── <design-artboard>.(svg|png|jpg|webp)
     ├── screens/
     │   └── <screen-id>.json
     └── README.md
@@ -23,6 +26,8 @@ Forge Design does not own project design data. Each target repository owns one t
 - `.design-harness/tokens.json` is the only design-token source of truth. Optional `colorModes.light/dark` token overrides make color-scheme Review Profiles real visual projections rather than labels; a used dark Review Profile fails validation when no dark override exists.
 - `.design-harness/components.json` is the component contract available to ChatGPT. Modern contracts may declare typed props, variants/states, semantic interaction role, layout/accessibility constraints, implementation binding metadata, and a constrained project-owned declarative preview tree. Legacy `allowedProps` contracts remain readable but do not define a full preview contract.
 - Each `screens/*.json` file is one independent Screen identity and reviewable Git artifact. A Screen may contain named state variants; variants do not become separate pseudo-screens just to capture empty/error/degraded/etc. states.
+- `.design-harness/visual-assets.json` is the visual-evidence index. `reference` means historical/inspiration evidence, `design_artboard` means the current high-fidelity visual design authority for a bound Screen/State/Profile, and `runtime_evidence` means captured production/simulator evidence. Roles are immutable for an existing asset id so evidence cannot silently be promoted into design authority.
+- Current `design_artboard` files must live below `.design-harness/artboards/`. Their actual file bytes are hashed into the owning Design Unit digest. References and runtime evidence are deliberately excluded from that digest: changing evidence must not invalidate a design, while changing the design artboard must make human acceptance stale.
 - `project.json` is the stable discovery entrypoint and declares the storage version.
 - Browser memory may hold temporary editor state, but localStorage and IndexedDB are never canonical.
 - `design.md` is an import/export transport, not canonical storage. Export is deterministic; import validates all included documents before publishing included assets and merges screens without implicit deletion.
@@ -39,16 +44,17 @@ Review Profiles are repository-native review environments, not browser preferenc
 
 A Design Unit moves through `draft / review / visual_reviewed / rejected`. Ordinary `putDesignUnits`, `putProductModel`, and portable Markdown import cannot manufacture human acceptance. Acceptance is recorded only through the dedicated strongly confirmed provider action after the Design Unit is `visual_reviewed`, required Review Profiles/artifacts exist, `.design-harness` is clean, and the candidate revision equals exact Git `HEAD`.
 
-Acceptance records both the accepted Git revision and a deterministic SHA-256 design digest. The digest covers the unit's contract projection, profiles, tokens, component contracts, screens/states, and related flows/patterns but excludes acceptance/freeze metadata, so committing the evidence does not invalidate itself. Later design changes make the acceptance stale. Whole-project freeze is allowed only when every Design Unit has current acceptance and project validation succeeds; the resulting freeze is the implementation-handoff evidence for Phase D.
+Acceptance records both the accepted Git revision and a deterministic SHA-256 design digest. The digest covers the unit's contract projection, profiles, tokens, component contracts, screens/states, related flows/patterns, and the actual bytes of bound current `design_artboard` assets, but excludes historical/reference/runtime evidence and acceptance/freeze metadata, so committing evidence does not invalidate itself. Later design changes make the acceptance stale. Whole-project freeze is allowed only when every Design Unit has current acceptance and project validation succeeds; the resulting freeze is the implementation-handoff evidence for Phase D.
 
 The legacy `product.json.golden.review.userDecision` remains readable for older embedded-product projects but ordinary design writes cannot change it. It is not the current family-aware Phase D handoff authority.
 
 ## Storage versions and migration
 
-- `1.0.0`: Forge Design 0.4-era storage without canonical `design-units.json`.
-- `1.1.0`: current storage with canonical Design Units.
+- `1.0.0`: legacy storage without canonical `design-units.json`.
+- `1.1.0`: canonical Design Units, without a visual-asset manifest.
+- `1.2.0`: current storage with canonical Design Units plus `visual-assets.json` and the repository-owned `artboards/` lane.
 
-Reading `1.0.0` is non-mutating. Forge Design synthesizes one in-memory `legacy-default` Design Unit so old projects remain inspectable, and context reports `migrationRequired: true`. Writes to Design Units fail closed until migration is explicit. `npm run --silent design -- migrate --project <id>` writes the compatible Design Unit document first and only then advances `project.json` to `1.1.0`, so a failed version bump cannot leave a manifest that claims assets which do not exist.
+Reading `1.0.0` and `1.1.0` remains non-mutating. Forge Design synthesizes compatible in-memory missing documents so old projects remain inspectable, and context reports `migrationRequired: true`. Writes to new-version assets fail closed until migration is explicit. `npm run --silent design -- migrate --project <id>` publishes the compatible Design Units when needed, an empty visual-asset manifest, the artboard directory, and the version bump through one repository-owned bundle transaction.
 
 ## Discovery
 

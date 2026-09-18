@@ -5,6 +5,7 @@ import tokens from '../../workspace/metronome/.design-harness/tokens.json';
 import components from '../../workspace/metronome/.design-harness/components.json';
 import product from '../../workspace/metronome/.design-harness/product.json';
 import designUnits from '../../workspace/metronome/.design-harness/design-units.json';
+import visualAssets from '../../workspace/metronome/.design-harness/visual-assets.json';
 import homeScreen from '../../workspace/metronome/.design-harness/screens/metronome-home.json';
 import emptyScreen from '../../workspace/metronome/.design-harness/screens/empty-state.json';
 import { designHarnessCapabilities, getComponentContract, getDesignTokens, getScreenSpec, lintScreenSpec, listComponents, listScreens } from './api';
@@ -19,8 +20,8 @@ const context = {
     versionControl: 'git',
     screenLayout: 'one-json-file-per-screen',
     browserStorageCanonical: false,
-    storageVersion: '1.1.0',
-    currentStorageVersion: '1.1.0',
+    storageVersion: '1.2.0',
+    currentStorageVersion: '1.2.0',
     migrationRequired: false,
   },
   tokens,
@@ -28,6 +29,8 @@ const context = {
   screens: [homeScreen, emptyScreen],
   product,
   designUnits,
+  visualAssets,
+  visualAssetStatus: [],
   goldenGate: { modeled: true, status: 'candidate', productContractReady: true, flowReady: false, interactionPatternsReady: false, runtimeReviewStage: 'captured', runtimeEvidenceReady: false, userDecision: 'pending', canApprove: false, blockers: ['candidate'] },
 } as DesignProjectContext;
 
