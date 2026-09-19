@@ -3,6 +3,7 @@ import type { ComponentContractsDocument, DesignReviewProfile, ScreenSpec, Visua
 import { MockScreen } from './MockScreen';
 
 export type ReviewCanvasMode = 'device' | 'full-page' | 'fit';
+export type ReviewCanvasLane = 'artboard' | 'semantic';
 
 type Props = {
   spec: ScreenSpec;
@@ -11,6 +12,10 @@ type Props = {
   surfaceStyle: CSSProperties;
   zoom: number;
   mode: ReviewCanvasMode;
+  lane: ReviewCanvasLane;
+  artboard: VisualAsset | null;
+  artboardUrl: string | null;
+  artboardIssue: string | null;
   reference: VisualAsset | null;
   referenceUrl: string | null;
 };
@@ -38,6 +43,10 @@ export function ReviewCanvas({
   surfaceStyle,
   zoom,
   mode,
+  lane,
+  artboard,
+  artboardUrl,
+  artboardIssue,
   reference,
   referenceUrl,
 }: Props): ReactElement {
@@ -64,13 +73,13 @@ export function ReviewCanvas({
   }, [comparing, frameHeight, frameWidth, mode]);
 
   const scale = mode === 'fit' ? fitScale : zoom;
-  const currentLabel = mode === 'device'
+  const modeLabel = mode === 'device'
     ? 'Device viewport · 内部滚动'
     : mode === 'full-page'
       ? 'Full page · 完整内容'
       : 'Fit · 自动适配';
 
-  const currentSurface = mode === 'full-page' ? (
+  const semanticSurface = mode === 'full-page' ? (
     <div className="review-full-page-frame" style={{ ...surfaceStyle, width: frameWidth, height: 'auto', zoom: scale }}>
       <MockScreen spec={spec} components={components} fullPage />
     </div>
@@ -89,6 +98,37 @@ export function ReviewCanvas({
     </div>
   );
 
+  const artboardContent = artboard && artboardUrl ? (
+    <img src={artboardUrl} alt={artboard.name} />
+  ) : (
+    <div className="review-artboard-empty" role="status">
+      <strong>High-fidelity Artboard missing</strong>
+      <span>{artboardIssue ?? 'No exact visual authority exists for this Screen / State / Review Profile.'}</span>
+    </div>
+  );
+
+  const artboardSurface = mode === 'full-page' ? (
+    <div className="review-artboard-full-page" style={{ width: screenWidth * scale, minHeight: screenHeight * scale }}>
+      {artboardContent}
+    </div>
+  ) : (
+    <div className="review-scaled-frame" style={{ width: frameWidth * scale, height: frameHeight * scale }}>
+      <div
+        className="device-frame review-device-frame"
+        data-color-scheme={profile?.colorScheme}
+        data-contrast={profile?.contrast}
+        data-reduce-motion={profile?.reduceMotion ? 'true' : 'false'}
+        style={{ ...surfaceStyle, transform: `scale(${scale})` }}
+      >
+        <div className="dynamic-island" />
+        <div className="artboard-viewport" style={{ width: screenWidth, height: screenHeight }}>
+          {artboardContent}
+        </div>
+      </div>
+    </div>
+  );
+
+  const currentSurface = lane === 'artboard' ? artboardSurface : semanticSurface;
   const referenceSurface = reference && referenceUrl ? (
     mode === 'full-page' ? (
       <div className="reference-full-page" style={{ width: screenWidth * scale }}>
@@ -105,11 +145,14 @@ export function ReviewCanvas({
     )
   ) : null;
 
+  const laneLabel = lane === 'artboard' ? 'Visual Artboard' : 'Semantic Preview';
+  const authorityLabel = lane === 'artboard' ? 'Visual authority' : 'Non-authority';
+
   return (
-    <div className="review-canvas" data-mode={mode} data-comparing={comparing ? 'true' : 'false'} ref={hostRef}>
+    <div className="review-canvas" data-mode={mode} data-lane={lane} data-comparing={comparing ? 'true' : 'false'} ref={hostRef}>
       <div className="review-columns">
         <section className="review-column">
-          <div className="review-column-label"><strong>{spec.name}</strong><span>{currentLabel} · {Math.round(scale * 100)}%</span></div>
+          <div className="review-column-label"><strong>{spec.name} · {laneLabel}</strong><span>{authorityLabel} · {modeLabel} · {Math.round(scale * 100)}%</span></div>
           <div className="review-surface-slot">{currentSurface}</div>
         </section>
         {referenceSurface && reference ? (

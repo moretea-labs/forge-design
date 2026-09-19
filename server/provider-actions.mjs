@@ -20,6 +20,7 @@ export const providerActions = [
   'design_put_screen',
   'design_get_product_flow',
   'design_put_product_flow',
+  'design_put_artboard',
   'design_get_review_status',
   'design_accept_unit',
   'design_freeze_project',
@@ -73,6 +74,14 @@ export async function executeProviderAction(store, actionId, input = {}) {
       await store.putProductModel(input.project_id, product);
       return structuredClone(findFlow(product, input.flow_id));
     }
+    case 'design_put_artboard': return await store.putDesignArtboard(input.project_id, {
+      designUnitId: input.unit_id,
+      screenId: input.screen_id,
+      stateId: input.state_id,
+      profileId: input.profile_id,
+      svg: input.svg,
+      name: input.name,
+    });
     case 'design_get_review_status': return await store.getDesignReviewStatus(input.project_id);
     case 'design_accept_unit': return await store.acceptDesignUnit(input.project_id, input.unit_id, { candidateRevision: input.candidate_revision, artifactRefs: input.artifact_refs ?? [], note: input.note });
     case 'design_freeze_project': return await store.freezeProjectDesign(input.project_id, { candidateRevision: input.candidate_revision, artifactRefs: input.artifact_refs ?? [], note: input.note });

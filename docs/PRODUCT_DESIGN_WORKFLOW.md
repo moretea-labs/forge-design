@@ -145,11 +145,11 @@ The design-to-implementation chain is:
 
 1. **Product Contract** — User Job, domain meaning, journey, states, interactions and ownership.
 2. **Semantic Design Model** — Design Units, Screens/States/Flows, component contracts and tokens.
-3. **High-fidelity Design Artboard** — the current visual composition for a bound Screen/State/Review Profile. This is the visual authority reviewed during Phase C.
+3. **High-fidelity Design Artboard** — the current visual composition for one exact Design Unit / Screen / State / Review Profile binding. This is the visual authority reviewed during Phase C. An exact binding may have only one current artboard; prior versions remain Git history rather than a second `active/latest/current` state.
 4. **Reference / Runtime Evidence** — historical designs, inspiration and production/simulator captures. They can be compared against the current artboard but never become design authority merely because they exist.
 5. **Human Acceptance + Design Freeze** — only current accepted artboards and semantic design at an exact revision may cross into implementation.
 
-Typed component previews remain useful for semantic/component inspection, but a generic preview tree is not a substitute for a real high-fidelity page design. Tool implementation source must never be the storage location for a product's design; product designs live in the target repository and survive Forge Design upgrades independently.
+Typed component previews remain useful for semantic/component inspection, but a generic preview tree is not a substitute for a real high-fidelity page design. The Web workspace therefore exposes **Semantic Preview** and **Visual Artboard** as separate lanes: Semantic Preview is a derived, non-authoritative projection of contracts; Visual Artboard resolves only the exact current `design_artboard` and shows a hard missing state rather than falling back to MockScreen. Tool implementation source must never be the storage location for a product's design; product designs live in the target repository and survive Forge Design upgrades independently.
 
 
 ## 9. Evidence and review
@@ -231,6 +231,6 @@ Runtime review stages are intentionally distinct:
 
 Each reviewable Design Unit declares the Review Profiles that materially test its design: viewport/safe area, color scheme, text scale, contrast review mode, and reduced-motion behavior. Profiles are part of the design digest. The Web workspace must actually project those values; a profile name alone is not review evidence. A used dark profile requires dark token overrides. Increased-contrast preview is a design-review aid, not a promise of pixel-identical OS rendering.
 
-After visual review, explicit user acceptance records an exact pre-evidence Git revision plus the unit digest. The acceptance metadata itself is excluded from the digest so committing the evidence does not self-invalidate it. Any later design change that affects the digest makes acceptance stale. The project may be frozen only when every Design Unit has current acceptance and project validation succeeds. This current project freeze is the gate from completed design into production implementation.
+A Design Unit may reach `visual_reviewed` only when every required Screen state has one resolvable current high-fidelity Artboard for every Review Profile declared by that unit. The coverage matrix is derived from Screens, their states, Review Profiles, and exact artboard bindings; it is not another persisted status authority. After visual review, explicit user acceptance additionally requires that complete coverage and records an exact pre-evidence Git revision plus the unit digest. The acceptance metadata itself is excluded from the digest so committing the evidence does not self-invalidate it. Any later design change that affects the digest makes acceptance stale. The project may be frozen only when every Design Unit has current acceptance and project validation succeeds. This current project freeze is the gate from completed design into production implementation.
 
 This prevents test success, screenshot creation, transport metadata, or an AI-authored `accepted` field from being mislabeled as human approval. Components and tokens remain downstream implementation contracts.

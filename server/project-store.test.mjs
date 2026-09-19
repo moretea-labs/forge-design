@@ -45,6 +45,13 @@ async function createReviewCandidate() {
   await git(fixture.projectRoot, ['config', 'user.email', 'forge-design-test@example.invalid']);
   await git(fixture.projectRoot, ['config', 'user.name', 'Forge Design Test']);
   await commitDesign(fixture.projectRoot, 'initial design');
+  await fixture.store.putDesignArtboard('fixture', {
+    designUnitId: 'primary',
+    screenId: 'home',
+    stateId: 'normal',
+    profileId: 'standard-light',
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 393 852"><rect width="393" height="852" fill="#fff"/><text x="24" y="80">Home design</text></svg>',
+  });
   const units = await fixture.store.getDesignUnits('fixture');
   units.units[0].review = {
     status: 'visual_reviewed',
@@ -240,6 +247,23 @@ describe('ProjectStore storage migration and design units', () => {
     const validation = await store.validateProject('fixture');
     expect(validation.ok).toBe(false);
     expect(validation.errors.join(' ')).toContain('references unknown screen missing-screen');
+  });
+
+  it('fails closed when one screen is claimed by multiple Design Unit owners', async () => {
+    const { store, projectRoot } = await createFixture();
+    const units = await store.getDesignUnits('fixture');
+    units.units.push({
+      id: 'secondary',
+      name: 'Secondary',
+      screenFamily: 'unclassified',
+      screenIds: ['home'],
+      contractRefs: [],
+      review: { status: 'draft', profileIds: ['standard-light'], artifactRefs: [], notes: [] },
+    });
+    await writeFile(join(projectRoot, '.design-harness', 'design-units.json'), JSON.stringify(units, null, 2) + '\n', 'utf8');
+    const validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.join(' ')).toContain('Screen home must have one Design Unit owner; found primary, secondary');
   });
 });
 
@@ -637,7 +661,7 @@ describe('ProjectStore visual authority assets', () => {
     await store.putVisualAssets('fixture', {
       schemaVersion: 1,
       assets: [
-        { id: 'home-design', name: 'Home Design', role: 'design_artboard', mediaType: 'image/svg+xml', provenance: { kind: 'repository_path', path: '.design-harness/artboards/home.svg' }, binding: { designUnitId: 'primary', screenId: 'home', profileId: 'standard-light' } },
+        { id: 'home-design', name: 'Home Design', role: 'design_artboard', mediaType: 'image/svg+xml', provenance: { kind: 'repository_path', path: '.design-harness/artboards/home.svg' }, binding: { designUnitId: 'primary', screenId: 'home', stateId: 'normal', profileId: 'standard-light' } },
         { id: 'home-reference', name: 'Home Reference', role: 'reference', mediaType: 'image/svg+xml', provenance: { kind: 'repository_path', path: '.design-harness/evidence/home-reference.svg' }, binding: { designUnitId: 'primary', screenId: 'home' } },
         { id: 'home-runtime', name: 'Home Runtime', role: 'runtime_evidence', mediaType: 'image/svg+xml', provenance: { kind: 'repository_path', path: '.design-harness/evidence/home-runtime.svg' }, binding: { designUnitId: 'primary', screenId: 'home' } },
       ],
@@ -654,6 +678,62 @@ describe('ProjectStore visual authority assets', () => {
     expect((await store.getDesignReviewStatus('fixture')).units[0].acceptanceCurrent).toBe(false);
   });
 });
+
+  it('authors one canonical SVG artboard atomically for an exact design binding', async () => {
+    const { store, projectRoot } = await createFixture();
+    const written = await store.putDesignArtboard('fixture', {
+      designUnitId: 'primary',
+      screenId: 'home',
+      stateId: 'normal',
+      profileId: 'standard-light',
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 393 900"><rect width="393" height="900" fill="#fff"/></svg>',
+    });
+    expect(written.asset).toMatchObject({
+      id: 'artboard_primary_home_normal_standard-light',
+      role: 'design_artboard',
+      provenance: { kind: 'repository_path', path: '.design-harness/artboards/primary/home/normal/standard-light.svg' },
+      binding: { designUnitId: 'primary', screenId: 'home', stateId: 'normal', profileId: 'standard-light' },
+      dimensions: { width: 393, height: 900 },
+    });
+    expect(await readFile(join(projectRoot, '.design-harness', 'artboards', 'primary', 'home', 'normal', 'standard-light.svg'), 'utf8')).toContain('viewBox="0 0 393 900"');
+    const manifest = await store.getVisualAssets('fixture');
+    expect(manifest.assets).toContainEqual(written.asset);
+
+    const updated = await store.putDesignArtboard('fixture', {
+      designUnitId: 'primary',
+      screenId: 'home',
+      stateId: 'normal',
+      profileId: 'standard-light',
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 393 980"><rect width="393" height="980" fill="#fff"/></svg>',
+    });
+    expect(updated.asset.id).toBe(written.asset.id);
+    expect((await store.getVisualAssets('fixture')).assets).toHaveLength(1);
+  });
+
+  it('requires unique complete design-artboard bindings and blocks visual review without coverage', async () => {
+    const { store } = await createFixture();
+    expect(() => validateVisualAssets({
+      schemaVersion: 1,
+      assets: [{
+        id: 'incomplete-artboard',
+        name: 'Incomplete',
+        role: 'design_artboard',
+        mediaType: 'image/svg+xml',
+        provenance: { kind: 'repository_path', path: '.design-harness/artboards/incomplete.svg' },
+        binding: { designUnitId: 'primary', screenId: 'home' },
+      }],
+    })).toThrow(DesignStoreError);
+
+    const units = await store.getDesignUnits('fixture');
+    units.units[0].review = { status: 'visual_reviewed', profileIds: ['standard-light'], artifactRefs: ['artifact://review/home'], notes: [] };
+    await store.putDesignUnits('fixture', units);
+    const validation = await store.validateProject('fixture');
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.join(' ')).toContain('without complete high-fidelity design artboard coverage');
+    const review = await store.getDesignReviewStatus('fixture');
+    expect(review.units[0].artboardCoverage).toMatchObject({ requiredCount: 1, presentCount: 0 });
+    expect(review.units[0].artboardCoverage.missing).toEqual([{ designUnitId: 'primary', screenId: 'home', stateId: 'normal', profileId: 'standard-light' }]);
+  });
 
 describe('ProjectStore human acceptance and freeze authority', () => {
   it('protects acceptance evidence from ordinary design writes', async () => {

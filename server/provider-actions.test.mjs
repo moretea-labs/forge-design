@@ -40,6 +40,9 @@ describe('Forge provider granular design actions', () => {
     const putFlow = registration.actions.find((action) => action.actionId === 'design_put_product_flow');
     expect(putFlow.argumentsSchema.properties.flow.required).toContain('id');
     expect(putFlow.argumentsSchema.properties.flow.properties.transitions.type).toBe('array');
+    const putArtboard = registration.actions.find((action) => action.actionId === 'design_put_artboard');
+    expect(putArtboard.argumentsSchema.required).toEqual(['project_id', 'unit_id', 'screen_id', 'state_id', 'profile_id', 'svg']);
+    expect(putArtboard.argumentsSchema).not.toHaveProperty('properties.path');
     const acceptUnit = registration.actions.find((action) => action.actionId === 'design_accept_unit');
     expect(acceptUnit).toMatchObject({ confirmation: 'strong_confirmation', requiredConfirmationText: 'accept-design-unit' });
     const freezeProject = registration.actions.find((action) => action.actionId === 'design_freeze_project');
@@ -56,6 +59,20 @@ describe('Forge provider granular design actions', () => {
     expect(review.units[0]).toMatchObject({ unitId: 'primary', reviewStatus: 'draft', acceptanceCurrent: false });
     const tokens = await executeProviderAction(store, 'design_get_tokens', { project_id: 'fixture' });
     expect(tokens.schemaVersion).toBe(1);
+  });
+
+  it('writes a canonical SVG artboard through semantic identities rather than a repository path', async () => {
+    const { store, projectRoot } = await fixture();
+    const result = await executeProviderAction(store, 'design_put_artboard', {
+      project_id: 'fixture',
+      unit_id: 'primary',
+      screen_id: 'home',
+      state_id: 'normal',
+      profile_id: 'standard-light',
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 393 852"><rect width="393" height="852" fill="#fff"/></svg>',
+    });
+    expect(result.asset.binding).toEqual({ designUnitId: 'primary', screenId: 'home', stateId: 'normal', profileId: 'standard-light' });
+    expect(await readFile(join(projectRoot, '.design-harness', 'artboards', 'primary', 'home', 'normal', 'standard-light.svg'), 'utf8')).toContain('<svg');
   });
 
   it('updates one Product Flow through canonical product.json and preserves unrelated product fields', async () => {

@@ -36,6 +36,13 @@ export type DesignReviewStatus = {
     currentDigest: string;
     acceptance: NonNullable<DesignUnit['review']>['acceptance'] | null;
     acceptanceCurrent: boolean;
+    artboardCoverage: {
+      requiredCount: number;
+      presentCount: number;
+      required: Array<{ designUnitId: string; screenId: string; stateId: string; profileId: string }>;
+      present: Array<{ designUnitId: string; screenId: string; stateId: string; profileId: string; assetId: string }>;
+      missing: Array<{ designUnitId: string; screenId: string; stateId: string; profileId: string }>;
+    };
   }>;
   freeze: NonNullable<DesignUnitsDocument['freeze']> | null;
   freezeCurrent: boolean;
@@ -114,6 +121,7 @@ export type DesignProjectPaths = {
   product: string;
   designUnits: string;
   visualAssets: string;
+  artboards: string;
 };
 
 export type ScreenStateVariant = NonNullable<ScreenSpec['states']>[number];

@@ -35,7 +35,7 @@ import type {
 import { initialScreenStateId, resolveScreenState, screenStateIds } from './core/schema';
 import { installTokenVariables } from './design-system/tokens';
 import { ProductWorkspace } from './components/ProductWorkspace';
-import { ReviewCanvas, type ReviewCanvasMode } from './components/ReviewCanvas';
+import { ReviewCanvas, type ReviewCanvasLane, type ReviewCanvasMode } from './components/ReviewCanvas';
 
 type WorkspaceView = 'product' | 'screens' | 'components' | 'tokens';
 type InspectorTab = 'inspect' | 'spec' | 'flow';
@@ -145,6 +145,7 @@ export default function App(): ReactElement {
   const [editorText, setEditorText] = useState('');
   const [zoom, setZoom] = useState(0.78);
   const [reviewMode, setReviewMode] = useState<ReviewCanvasMode>('device');
+  const [reviewLane, setReviewLane] = useState<ReviewCanvasLane>('artboard');
   const [selectedReferenceId, setSelectedReferenceId] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
@@ -157,19 +158,41 @@ export default function App(): ReactElement {
   const issues = useMemo(() => resolvedSelected && context ? lintScreen(resolvedSelected, context.components) : [], [resolvedSelected, context]);
   const reviewProfiles = context?.designUnits.reviewProfiles ?? [];
   const reviewProfile = reviewProfiles.find((profile) => profile.id === reviewProfileId) ?? reviewProfiles[0] ?? null;
+  const ownerUnits = useMemo(() => context && selected
+    ? context.designUnits.units.filter((unit) => unit.screenIds.includes(selected.id))
+    : [], [context, selected]);
+  const selectedOwnerUnit = ownerUnits.length === 1 ? ownerUnits[0] : null;
+  const artboardCandidates = useMemo(() => {
+    if (!context || !selected || !selectedOwnerUnit || !reviewProfile) return [];
+    return context.visualAssets.assets.filter((asset) => asset.role === 'design_artboard'
+      && asset.binding?.designUnitId === selectedOwnerUnit.id
+      && asset.binding?.screenId === selected.id
+      && asset.binding?.stateId === activeStateId
+      && asset.binding?.profileId === reviewProfile.id);
+  }, [activeStateId, context, reviewProfile, selected, selectedOwnerUnit]);
+  const availableAssetIds = useMemo(() => new Set((context?.visualAssetStatus ?? []).filter((status) => status.present).map((status) => status.assetId)), [context]);
+  const selectedArtboard = artboardCandidates.length === 1 && availableAssetIds.has(artboardCandidates[0].id) ? artboardCandidates[0] : null;
+  const artboardIssue = ownerUnits.length !== 1
+    ? `Screen must belong to exactly one Design Unit before a visual authority can be resolved; found ${ownerUnits.length}.`
+    : artboardCandidates.length > 1
+      ? 'Multiple current design artboards claim the same exact binding. Resolve the authority conflict.'
+      : artboardCandidates.length === 1 && !availableAssetIds.has(artboardCandidates[0].id)
+        ? 'The bound design artboard is declared but its repository content cannot be resolved.'
+        : artboardCandidates.length === 0
+          ? 'No current design_artboard is bound to this Design Unit / Screen / State / Review Profile.'
+          : null;
   const compatibleReferences = useMemo(() => {
     if (!context || !selected) return [];
-    const ownerUnits = new Set(context.designUnits.units.filter((unit) => unit.screenIds.includes(selected.id)).map((unit) => unit.id));
-    const available = new Set(context.visualAssetStatus.filter((status) => status.present).map((status) => status.assetId));
+    const ownerIds = new Set(ownerUnits.map((unit) => unit.id));
     return context.visualAssets.assets.filter((asset) => {
-      if (asset.role !== 'reference' || !available.has(asset.id) || !asset.binding) return false;
+      if (asset.role !== 'reference' || !availableAssetIds.has(asset.id) || !asset.binding) return false;
       if (asset.binding.screenId && asset.binding.screenId !== selected.id) return false;
       if (asset.binding.stateId && asset.binding.stateId !== activeStateId) return false;
       if (asset.binding.profileId && asset.binding.profileId !== reviewProfileId) return false;
-      if (asset.binding.designUnitId && !ownerUnits.has(asset.binding.designUnitId)) return false;
-      return asset.binding.screenId === selected.id || Boolean(asset.binding.designUnitId && ownerUnits.has(asset.binding.designUnitId));
+      if (asset.binding.designUnitId && !ownerIds.has(asset.binding.designUnitId)) return false;
+      return asset.binding.screenId === selected.id || Boolean(asset.binding.designUnitId && ownerIds.has(asset.binding.designUnitId));
     });
-  }, [activeStateId, context, reviewProfileId, selected]);
+  }, [activeStateId, availableAssetIds, context, ownerUnits, reviewProfileId, selected]);
   const selectedReference = selectedReferenceId ? compatibleReferences.find((asset) => asset.id === selectedReferenceId) ?? null : null;
   const selectedFlows = useMemo(() => {
     if (!context?.product || !selected) return [];
@@ -422,6 +445,7 @@ export default function App(): ReactElement {
     return (
       <>
         <section className="inspector-section"><div className="inspector-title"><Focus size={16} /><strong>页面意图</strong></div><p>{resolvedSelected?.goal}</p><div className="primary-tag">Primary · {resolvedSelected?.primaryAction}</div></section>
+        <section className="inspector-section"><div className="inspector-title"><Layers3 size={16} /><strong>Visual authority</strong><span>{selectedArtboard ? 'current' : 'missing'}</span></div>{selectedArtboard ? <div className="lint-success"><CheckCircle2 size={17} />Exact high-fidelity Artboard · {selectedArtboard.id}</div> : <div className="lint-list"><div><CircleAlert size={16} /><span>{artboardIssue}</span></div></div>}<p className="authority-note">Semantic Preview is derived from contracts and never substitutes for this Artboard.</p></section>
         <section className="inspector-section"><div className="inspector-title"><FileCode2 size={16} /><strong>约束</strong><span>{resolvedSelected?.constraints.length ?? 0}</span></div><ul>{(resolvedSelected?.constraints ?? []).map((item) => <li key={item}>{item}</li>)}</ul></section>
         <section className="inspector-section"><div className="inspector-title"><Component size={16} /><strong>组件树</strong><span>{resolvedSelected?.nodes.length ?? 0}</span></div><div className="component-tree">{(resolvedSelected?.nodes ?? []).map((node) => <div key={node.id}><span className="tree-line" /><span>{node.component}</span><small>{contracts.find((item) => item.name === node.component)?.category ?? 'missing'}</small></div>)}</div></section>
         <section className="inspector-section"><div className="inspector-title"><CheckCircle2 size={16} /><strong>Design lint</strong><span>{issues.length}</span></div>{issues.length === 0 ? <div className="lint-success"><CheckCircle2 size={17} />通过全部规则</div> : <div className="lint-list">{issues.map((issue) => <div key={`${issue.rule}-${issue.nodeId ?? ''}`}><CircleAlert size={16} /><span><strong>{issue.rule}</strong>{issue.message}</span></div>)}</div>}</section>
@@ -454,6 +478,7 @@ export default function App(): ReactElement {
             <button onClick={() => void loadProjects()} disabled={busy}><RefreshCw className={busy ? 'spin' : ''} size={15} />刷新</button>
             {view === 'screens' && reviewProfile && <label className="device-select"><Smartphone size={15} /><select aria-label="Review Profile" value={reviewProfile.id} onChange={(event) => setReviewProfileId(event.target.value)}>{reviewProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select><ChevronDown size={13} /></label>}
             {view === 'screens' && selected && selectedStateIds.length > 1 && <label className="device-select"><Layers3 size={15} /><select aria-label="页面状态" value={activeStateId} onChange={(event) => setActiveStateId(event.target.value)}>{selected.states?.map((state) => <option key={state.id} value={state.id}>{state.name}</option>)}</select><ChevronDown size={13} /></label>}
+            {view === 'screens' && <label className="device-select"><Layers3 size={15} /><select aria-label="Design lane" value={reviewLane} onChange={(event) => setReviewLane(event.target.value as ReviewCanvasLane)}><option value="artboard">Visual Artboard</option><option value="semantic">Semantic Preview</option></select><ChevronDown size={13} /></label>}
             {view === 'screens' && <label className="device-select"><Focus size={15} /><select aria-label="Review mode" value={reviewMode} onChange={(event) => setReviewMode(event.target.value as ReviewCanvasMode)}><option value="device">Device</option><option value="full-page">Full page</option><option value="fit">Fit</option></select><ChevronDown size={13} /></label>}
             {view === 'screens' && compatibleReferences.length > 0 && <label className="device-select"><Layers3 size={15} /><select aria-label="Visual reference" value={selectedReference?.id ?? ''} onChange={(event) => setSelectedReferenceId(event.target.value)}><option value="">No reference</option>{compatibleReferences.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select><ChevronDown size={13} /></label>}
             {view === 'screens' && <label><span>{reviewMode === 'fit' ? 'Auto' : `${Math.round(zoom * 100)}%`}</span><input aria-label="Review zoom" type="range" min="0.35" max="1.25" step="0.01" value={zoom} disabled={reviewMode === 'fit'} onChange={(event) => setZoom(Number(event.target.value))} /></label>}
@@ -473,13 +498,17 @@ export default function App(): ReactElement {
           />
         ) : view === 'screens' && selected ? (
           <ReviewCanvas
-            key={`${selected.id}-${activeStateId}-${reviewProfile?.id ?? 'default'}`}
+            key={`${selected.id}-${activeStateId}-${reviewProfile?.id ?? 'default'}-${reviewLane}`}
             spec={resolvedSelected ?? selected}
             components={context.components}
             profile={reviewProfile}
             surfaceStyle={reviewProfile ? reviewSurfaceStyle(reviewProfile, context.tokens) : {}}
             zoom={zoom}
             mode={reviewMode}
+            lane={reviewLane}
+            artboard={selectedArtboard}
+            artboardUrl={selectedArtboard ? visualAssetContentUrl(projectId, selectedArtboard.id) : null}
+            artboardIssue={artboardIssue}
             reference={selectedReference}
             referenceUrl={selectedReference ? visualAssetContentUrl(projectId, selectedReference.id) : null}
           />

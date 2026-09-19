@@ -262,6 +262,7 @@ function assertRepositoryRelativeAssetPath(value) {
 export function validateVisualAssets(document) {
   validateSchema('visual-assets', document);
   const ids = new Set();
+  const artboardBindings = new Map();
   for (const asset of document.assets) {
     assert(!ids.has(asset.id), 'Duplicate visual asset id: ' + asset.id + '.', 'DUPLICATE_VISUAL_ASSET_ID');
     ids.add(asset.id);
@@ -272,9 +273,18 @@ export function validateVisualAssets(document) {
       assert(asset.provenance.revision === undefined, 'Current-path visual asset ' + asset.id + ' cannot carry a historical revision.', 'VISUAL_ASSET_REVISION_FORBIDDEN');
     }
     if (asset.role === 'design_artboard') {
+      const binding = asset.binding ?? {};
       assert(asset.provenance.kind === 'repository_path', 'Design artboard ' + asset.id + ' must use current repository_path provenance.', 'DESIGN_ARTBOARD_PROVENANCE_INVALID');
       assert(asset.provenance.path.startsWith('.design-harness/artboards/'), 'Design artboard ' + asset.id + ' must live under .design-harness/artboards/.', 'DESIGN_ARTBOARD_PATH_INVALID');
-      assert(Boolean(asset.binding?.screenId), 'Design artboard ' + asset.id + ' must bind to a screen.', 'DESIGN_ARTBOARD_SCREEN_REQUIRED');
+      assert(Boolean(binding.designUnitId), 'Design artboard ' + asset.id + ' must bind to a design unit.', 'DESIGN_ARTBOARD_UNIT_REQUIRED');
+      assert(Boolean(binding.screenId), 'Design artboard ' + asset.id + ' must bind to a screen.', 'DESIGN_ARTBOARD_SCREEN_REQUIRED');
+      assert(Boolean(binding.stateId), 'Design artboard ' + asset.id + ' must bind to a screen state.', 'DESIGN_ARTBOARD_STATE_REQUIRED');
+      assert(Boolean(binding.profileId), 'Design artboard ' + asset.id + ' must bind to a review profile.', 'DESIGN_ARTBOARD_PROFILE_REQUIRED');
+      const bindingKey = [binding.designUnitId, binding.screenId, binding.stateId, binding.profileId].join('/');
+      assert(!artboardBindings.has(bindingKey),
+        'Design artboard authority must be unique for ' + bindingKey + '; found ' + artboardBindings.get(bindingKey) + ' and ' + asset.id + '.',
+        'DESIGN_ARTBOARD_AUTHORITY_CONFLICT');
+      artboardBindings.set(bindingKey, asset.id);
     }
     if (asset.binding?.stateId) assert(Boolean(asset.binding.screenId), 'Visual asset ' + asset.id + ' state binding requires screenId.', 'VISUAL_ASSET_STATE_SCREEN_REQUIRED');
   }
@@ -308,6 +318,29 @@ function sha256(value) {
 
 function sha256Bytes(value) {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function canonicalArtboardIdentity(designUnitId, screenId, stateId, profileId) {
+  return {
+    assetId: ['artboard', designUnitId, screenId, stateId, profileId].join('_'),
+    provenancePath: ['.design-harness', 'artboards', designUnitId, screenId, stateId, profileId + '.svg'].join('/'),
+    stagePathSegments: ['artboards', designUnitId, screenId, stateId, profileId + '.svg'],
+  };
+}
+
+function svgArtboardDimensions(svg) {
+  assert(typeof svg === 'string' && svg.trim().length > 0, 'Design artboard SVG must be a non-empty string.', 'DESIGN_ARTBOARD_SVG_REQUIRED');
+  assert(Buffer.byteLength(svg, 'utf8') <= maxVisualAssetBytes, 'Design artboard SVG exceeds the visual asset size limit.', 'VISUAL_ASSET_TOO_LARGE');
+  assert(!/<(?:script|foreignObject)\b/i.test(svg) && !/\son[a-z]+\s*=/i.test(svg) && !/javascript:/i.test(svg) && !/<!DOCTYPE/i.test(svg),
+    'Design artboard SVG contains executable or externally interpreted markup.', 'DESIGN_ARTBOARD_SVG_UNSAFE');
+  const svgTag = svg.match(/<svg\b[^>]*>/i)?.[0];
+  assert(svgTag, 'Design artboard content must contain an SVG root element.', 'DESIGN_ARTBOARD_SVG_INVALID');
+  const viewBox = svgTag.match(/\bviewBox\s*=\s*["']\s*([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*["']/i);
+  let width = viewBox ? Number(viewBox[3]) : Number(svgTag.match(/\bwidth\s*=\s*["']\s*([-+]?\d*\.?\d+)(?:px)?\s*["']/i)?.[1]);
+  let height = viewBox ? Number(viewBox[4]) : Number(svgTag.match(/\bheight\s*=\s*["']\s*([-+]?\d*\.?\d+)(?:px)?\s*["']/i)?.[1]);
+  assert(Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0,
+    'Design artboard SVG must declare positive intrinsic dimensions through viewBox or numeric width/height.', 'DESIGN_ARTBOARD_DIMENSIONS_REQUIRED');
+  return { width, height };
 }
 
 async function readVisualAssetBytes(project, asset) {
@@ -554,6 +587,37 @@ function visualAssetReferenceErrors(visualAssets, designUnits, screens) {
   return errors;
 }
 
+function designArtboardCoverageForUnit(context, unit) {
+  const screenMap = new Map(context.screens.map((screen) => [screen.id, screen]));
+  const statusMap = new Map((context.visualAssetStatus ?? []).map((status) => [status.assetId, status]));
+  const byBinding = new Map();
+  for (const asset of context.visualAssets.assets) {
+    if (asset.role !== 'design_artboard') continue;
+    const binding = asset.binding ?? {};
+    if (!binding.designUnitId || !binding.screenId || !binding.stateId || !binding.profileId) continue;
+    const key = [binding.designUnitId, binding.screenId, binding.stateId, binding.profileId].join('/');
+    byBinding.set(key, asset);
+  }
+  const required = [];
+  const present = [];
+  const missing = [];
+  for (const screenId of unit.screenIds) {
+    const screen = screenMap.get(screenId);
+    if (!screen) continue;
+    for (const stateId of screenStateIds(screen)) {
+      for (const profileId of unit.review?.profileIds ?? []) {
+        const binding = { designUnitId: unit.id, screenId, stateId, profileId };
+        const key = [unit.id, screenId, stateId, profileId].join('/');
+        required.push(binding);
+        const asset = byBinding.get(key);
+        if (asset && statusMap.get(asset.id)?.present) present.push({ ...binding, assetId: asset.id });
+        else missing.push(binding);
+      }
+    }
+  }
+  return { requiredCount: required.length, presentCount: present.length, required, present, missing };
+}
+
 async function pathExists(path) {
   try {
     await access(path);
@@ -797,6 +861,7 @@ export class ProjectStore {
       product: join(project.storagePath, 'product.json'),
       designUnits: join(project.storagePath, 'design-units.json'),
       visualAssets: join(project.storagePath, 'visual-assets.json'),
+      artboards: join(project.storagePath, 'artboards'),
     };
   }
 
@@ -894,6 +959,69 @@ export class ProjectStore {
     return structuredClone(document);
   }
 
+  async putDesignArtboard(projectId, { designUnitId, screenId, stateId, profileId, svg, name } = {}) {
+    for (const [label, value] of [['design unit id', designUnitId], ['screen id', screenId], ['state id', stateId], ['profile id', profileId]]) assertSafeId(value, label);
+    const project = await this.resolveProject(projectId);
+    if (project.manifest.storageVersion !== currentStorageVersion) {
+      throw new DesignStoreError('Project ' + projectId + ' uses storageVersion ' + project.manifest.storageVersion + '; migrate to ' + currentStorageVersion + ' before writing design artboards.', 409, 'STORAGE_MIGRATION_REQUIRED');
+    }
+    const [designUnits, screen, visualAssets] = await Promise.all([
+      this.getDesignUnits(projectId),
+      this.getScreen(projectId, screenId),
+      this.getVisualAssets(projectId),
+    ]);
+    const unit = designUnits.units.find((item) => item.id === designUnitId);
+    assert(unit, 'Unknown design unit: ' + designUnitId + '.', 'DESIGN_UNIT_NOT_FOUND');
+    assert(unit.screenIds.includes(screenId), 'Design unit ' + designUnitId + ' does not own screen ' + screenId + '.', 'DESIGN_ARTBOARD_SCREEN_OWNER_INVALID');
+    assert(screenStateIds(screen).has(stateId), 'Screen ' + screenId + ' does not define state ' + stateId + '.', 'DESIGN_ARTBOARD_STATE_INVALID');
+    const profile = (designUnits.reviewProfiles ?? []).find((item) => item.id === profileId);
+    assert(profile, 'Unknown review profile: ' + profileId + '.', 'DESIGN_ARTBOARD_PROFILE_INVALID');
+    assert((unit.review?.profileIds ?? []).includes(profileId), 'Review profile ' + profileId + ' is not required by design unit ' + designUnitId + '.', 'DESIGN_ARTBOARD_PROFILE_NOT_REQUIRED');
+    const dimensions = svgArtboardDimensions(svg);
+    assert(dimensions.width === profile.viewport.width,
+      'Design artboard width ' + dimensions.width + ' must equal review profile viewport width ' + profile.viewport.width + '.',
+      'DESIGN_ARTBOARD_VIEWPORT_WIDTH_MISMATCH');
+    assert(dimensions.height >= profile.viewport.height,
+      'Design artboard height ' + dimensions.height + ' must cover review profile viewport height ' + profile.viewport.height + '.',
+      'DESIGN_ARTBOARD_VIEWPORT_HEIGHT_TOO_SMALL');
+
+    const identity = canonicalArtboardIdentity(designUnitId, screenId, stateId, profileId);
+    const sameBinding = visualAssets.assets.filter((asset) => asset.role === 'design_artboard'
+      && asset.binding?.designUnitId === designUnitId
+      && asset.binding?.screenId === screenId
+      && asset.binding?.stateId === stateId
+      && asset.binding?.profileId === profileId);
+    assert(sameBinding.length <= 1, 'Multiple current design artboards already claim this binding.', 'DESIGN_ARTBOARD_AUTHORITY_CONFLICT');
+    if (sameBinding[0]) {
+      assert(sameBinding[0].id === identity.assetId && sameBinding[0].provenance.path === identity.provenancePath,
+        'Existing design artboard authority for this binding is not on the canonical identity/path; reconcile it before canonical authoring.',
+        'DESIGN_ARTBOARD_CANONICAL_IDENTITY_CONFLICT');
+    }
+    const asset = {
+      id: identity.assetId,
+      name: name?.trim() || screen.name + ' · ' + stateId + ' · ' + profile.name,
+      role: 'design_artboard',
+      mediaType: 'image/svg+xml',
+      provenance: { kind: 'repository_path', path: identity.provenancePath },
+      binding: { designUnitId, screenId, stateId, profileId },
+      dimensions,
+    };
+    const nextVisualAssets = structuredClone(visualAssets);
+    const existingIndex = nextVisualAssets.assets.findIndex((item) => item.id === asset.id);
+    if (existingIndex >= 0) nextVisualAssets.assets[existingIndex] = asset;
+    else nextVisualAssets.assets.push(asset);
+    validateVisualAssets(nextVisualAssets);
+    assertVisualAssetRolesUnchanged(visualAssets, nextVisualAssets);
+
+    await this.publishStorageTransaction(project, async (stageStoragePath) => {
+      const artboardPath = join(stageStoragePath, ...identity.stagePathSegments);
+      await mkdir(dirname(artboardPath), { recursive: true });
+      await writeFile(artboardPath, svg, 'utf8');
+      await writeJsonAtomic(join(stageStoragePath, 'visual-assets.json'), nextVisualAssets);
+    });
+    return { asset: structuredClone(asset), contentSha256: sha256Bytes(Buffer.from(svg, 'utf8')) };
+  }
+
   async getVisualAssetContent(projectId, assetId) {
     assertSafeId(assetId, 'asset');
     const project = await this.resolveProject(projectId);
@@ -933,12 +1061,20 @@ export class ProjectStore {
     assertSafeId(unitId, 'design unit id');
     await this.assertDesignCandidateRevision(projectId, candidateRevision);
     const project = await this.resolveProject(projectId);
-    const document = await this.getDesignUnits(projectId);
+    const context = await this.getContext(projectId);
+    const document = context.designUnits;
     const unit = document.units.find((item) => item.id === unitId);
     if (!unit) throw new DesignStoreError(`Unknown design unit: ${unitId}.`, 404, 'DESIGN_UNIT_NOT_FOUND');
     assert(unit.review?.status === 'visual_reviewed', `Design unit ${unitId} must reach visual_reviewed before user acceptance.`, 'DESIGN_UNIT_NOT_VISUALLY_REVIEWED');
     assert((unit.review.profileIds ?? []).length > 0, `Design unit ${unitId} requires at least one review profile before acceptance.`, 'DESIGN_REVIEW_PROFILE_REQUIRED');
-    const designDigest = await this.designUnitDigest(projectId, unitId);
+    assert((unit.review.artifactRefs ?? []).length > 0, `Design unit ${unitId} requires concrete visual review artifacts before acceptance.`, 'DESIGN_REVIEW_ARTIFACT_REQUIRED');
+    const coverage = designArtboardCoverageForUnit(context, unit);
+    assert(coverage.missing.length === 0,
+      `Design unit ${unitId} cannot be accepted without complete high-fidelity design artboard coverage.`,
+      'DESIGN_ARTBOARD_COVERAGE_REQUIRED');
+    const validation = await this.validateProject(projectId);
+    assert(validation.ok, `Design unit ${unitId} cannot be accepted while project validation fails: ${validation.errors.join(' ')}`, 'DESIGN_ACCEPTANCE_VALIDATION_FAILED');
+    const designDigest = designUnitDigestFromContext(context, unitId);
     unit.review.acceptance = { acceptedRevision: candidateRevision, designDigest, acceptedAt: new Date().toISOString(), artifactRefs, ...(note ? { note } : {}) };
     validateDesignUnits(document);
     await writeJsonAtomic(join(project.storagePath, 'design-units.json'), document);
@@ -968,12 +1104,14 @@ export class ProjectStore {
   }
 
   async getDesignReviewStatus(projectId) {
-    const document = await this.getDesignUnits(projectId);
+    const context = await this.getContext(projectId);
+    const document = context.designUnits;
     const units = [];
     for (const unit of document.units) {
-      const currentDigest = await this.designUnitDigest(projectId, unit.id);
+      const currentDigest = designUnitDigestFromContext(context, unit.id);
       const acceptance = unit.review?.acceptance ?? null;
-      units.push({ unitId: unit.id, reviewStatus: unit.review?.status ?? 'draft', currentDigest, acceptance, acceptanceCurrent: Boolean(acceptance && acceptance.designDigest === currentDigest) });
+      const artboardCoverage = designArtboardCoverageForUnit(context, unit);
+      units.push({ unitId: unit.id, reviewStatus: unit.review?.status ?? 'draft', currentDigest, acceptance, acceptanceCurrent: Boolean(acceptance && acceptance.designDigest === currentDigest), artboardCoverage });
     }
     const digestByUnit = new Map(units.map((unit) => [unit.unitId, unit.currentDigest]));
     const freezeCurrent = Boolean(document.freeze && document.freeze.unitDigests.length === units.length
@@ -1246,11 +1384,18 @@ export class ProjectStore {
       warnings.push(`storageVersion ${context.storage.storageVersion} is readable compatibility state; migrate to ${context.storage.currentStorageVersion} before design-unit writes.`);
     }
     const assignedScreens = new Set();
+    const screenOwners = new Map();
     for (const unit of context.designUnits.units) {
       for (const screenId of unit.screenIds) {
         if (!screenIds.has(screenId)) errors.push(`Design unit ${unit.id} references unknown screen ${screenId}.`);
         assignedScreens.add(screenId);
+        const owners = screenOwners.get(screenId) ?? [];
+        owners.push(unit.id);
+        screenOwners.set(screenId, owners);
       }
+    }
+    for (const [screenId, owners] of screenOwners) {
+      if (owners.length > 1) errors.push(`Screen ${screenId} must have one Design Unit owner; found ${owners.join(', ')}.`);
     }
     for (const screenId of screenIds) if (!assignedScreens.has(screenId)) warnings.push(`Screen ${screenId} is not assigned to a design unit.`);
     errors.push(...visualAssetReferenceErrors(context.visualAssets, context.designUnits, context.screens));
@@ -1266,6 +1411,11 @@ export class ProjectStore {
       if (unit.review?.status === 'visual_reviewed') {
         if ((unit.review.profileIds ?? []).length === 0) errors.push(`Design unit ${unit.id} is visual_reviewed without a review profile.`);
         if ((unit.review.artifactRefs ?? []).length === 0) errors.push(`Design unit ${unit.id} is visual_reviewed without review artifacts.`);
+        const coverage = designArtboardCoverageForUnit(context, unit);
+        if (coverage.missing.length > 0) {
+          const missing = coverage.missing.map((item) => `${item.screenId}/${item.stateId}@${item.profileId}`).join(', ');
+          errors.push(`Design unit ${unit.id} is visual_reviewed without complete high-fidelity design artboard coverage: ${missing}.`);
+        }
       }
       if (unit.review?.acceptance) {
         const digest = designUnitDigestFromContext(context, unit.id);

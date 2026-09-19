@@ -18,6 +18,8 @@ const projectId = { type:'string', pattern:'^[a-z0-9][a-z0-9_-]*$' };
 const screenId = { type:'string', pattern:'^[a-z0-9][a-z0-9_-]*$' };
 const flowId = { type:'string', pattern:'^[a-z0-9][a-z0-9_-]*$' };
 const unitId = { type:'string', pattern:'^[a-z0-9][a-z0-9_-]*$' };
+const stateId = unitId;
+const profileId = unitId;
 const exactRevision = { type:'string', pattern:'^[0-9a-f]{40,64}$' };
 const artifactRefs = { type:'array', items:{ type:'string', minLength:1 }, default:[] };
 const optionalNote = { type:'string', minLength:1 };
@@ -56,6 +58,7 @@ const actions = [
   writeAction('design_put_screen','Put screen','Validate and atomically replace one Screen Spec whose id matches screen_id.',objectArgs({project_id:projectId,screen_id:screenId,screen:screenDocument})),
   readAction('design_get_product_flow','Get product flow','Read one transition-based Product Flow from canonical product.json.',objectArgs({project_id:projectId,flow_id:flowId})),
   writeAction('design_put_product_flow','Put product flow','Validate and upsert one Product Flow inside canonical product.json without creating a second flow authority.',objectArgs({project_id:projectId,flow_id:flowId,flow:flowDocument})),
+  writeAction('design_put_artboard','Put high-fidelity artboard','Atomically write one canonical repository-native SVG artboard and its exact Design Unit / Screen / State / Review Profile manifest binding.',objectArgs({project_id:projectId,unit_id:unitId,screen_id:screenId,state_id:stateId,profile_id:profileId,svg:{type:'string',minLength:1,maxLength:8000000},name:{type:'string',minLength:1}},['project_id','unit_id','screen_id','state_id','profile_id','svg']),30000,true),
   readAction('design_get_review_status','Get design review status','Read per-Design-Unit review state, current design digests, acceptance currency and project freeze currency.',projectArgs),
   strongWriteAction('design_accept_unit','Accept Design Unit','Record human acceptance evidence for one visually reviewed Design Unit at an exact clean Git revision.','accept-design-unit',objectArgs({project_id:projectId,unit_id:unitId,candidate_revision:exactRevision,artifact_refs:artifactRefs,note:optionalNote},['project_id','unit_id','candidate_revision'])),
   strongWriteAction('design_freeze_project','Freeze design project','Freeze the whole design only after every Design Unit has current human acceptance evidence at an exact clean Git revision.','freeze-design-project',objectArgs({project_id:projectId,candidate_revision:exactRevision,artifact_refs:artifactRefs,note:optionalNote},['project_id','candidate_revision'])),
