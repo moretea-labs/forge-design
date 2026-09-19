@@ -38,7 +38,25 @@ button { color: inherit; }
 .toolbar-controls input { width: 76px; accent-color: var(--color-accent); }
 .canvas-grid { position: absolute; inset: 58px 0 0; display: grid; place-items: center; padding-top: var(--space-xxl); overflow: auto; }
 .artboard-label { position: absolute; top: var(--space-xl); left: 50%; display: flex; justify-content: space-between; width: 393px; transform: translateX(-50%); color: var(--color-artboard-label); font-size: 10px; }
-.device-frame { position: relative; width: 417px; height: 876px; padding: 12px; border: 1px solid var(--color-device-border); border-radius: 54px; background: var(--color-device-frame); box-shadow: var(--shadow-device); transform-origin: center; transition: transform 160ms ease; }
+.review-canvas { position: absolute; inset: 58px 0 0; min-width: 0; overflow: auto; padding: var(--space-xl); }
+.review-columns { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-xl); width: 100%; min-height: 100%; align-items: start; }
+.review-canvas[data-comparing="true"] .review-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.review-column { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: var(--space-md); min-width: 0; justify-items: center; }
+.review-column-label { display: flex; justify-content: space-between; gap: var(--space-lg); width: min(100%, 520px); color: var(--color-artboard-label); font-size: 10px; }
+.review-column-label span { color: var(--color-chrome-text-subtle); }
+.review-surface-slot { display: flex; justify-content: center; align-items: flex-start; width: 100%; min-height: 260px; padding-bottom: var(--space-xxl); }
+.review-scaled-frame { position: relative; flex: 0 0 auto; }
+.device-frame { position: relative; width: 417px; height: 876px; padding: 12px; overflow: hidden; border: 1px solid var(--color-device-border); border-radius: 54px; background: var(--color-device-frame); box-shadow: var(--shadow-device); transform-origin: top left; transition: transform 160ms ease; }
+.review-full-page-frame { flex: 0 0 auto; padding: 12px; overflow: visible; border: 1px solid var(--color-device-border); border-radius: 28px; background: var(--color-device-frame); box-shadow: var(--shadow-device); transform-origin: top center; }
+.mock-screen-full-page { height: auto; min-height: var(--review-screen-height, 852px); overflow: visible; }
+.reference-device-frame { padding: 12px; overflow: hidden; border: 1px solid var(--color-device-border); border-radius: 54px; background: var(--color-device-frame); box-shadow: var(--shadow-device); transform-origin: top left; }
+.reference-viewport { overflow: auto; border-radius: var(--radius-device); background: var(--color-screen-background); scrollbar-gutter: stable; }
+.reference-viewport img, .reference-full-page img { display: block; width: 100%; height: auto; }
+.reference-full-page { overflow: hidden; border: 1px solid var(--color-device-border); border-radius: 28px; background: var(--color-device-frame); box-shadow: var(--shadow-device); }
+.review-canvas[data-mode="device"] .mock-screen, .reference-viewport { scrollbar-width: thin; }
+.review-canvas[data-mode="fit"] { overflow: hidden; }
+.review-canvas[data-mode="fit"] .review-columns { height: 100%; align-items: center; }
+
 .device-frame[data-reduce-motion="true"] *, .device-frame[data-reduce-motion="true"] *::before, .device-frame[data-reduce-motion="true"] *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 .mock-screen { position: relative; display: flex; flex-direction: column; gap: var(--space-lg); width: var(--review-screen-width, 393px); height: var(--review-screen-height, 852px); margin: 0; padding: var(--review-safe-top, 54px) var(--space-xl) var(--review-safe-bottom, 30px); overflow: auto; border-radius: var(--radius-device); color: var(--color-text-primary); background: var(--color-screen-background); }
 .dynamic-island { position: absolute; z-index: 5; top: 22px; left: 50%; width: 112px; height: 32px; transform: translateX(-50%); border-radius: var(--radius-pill); background: var(--color-device-island); }

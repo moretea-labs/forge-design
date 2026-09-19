@@ -18,7 +18,7 @@ import {
   Smartphone,
   SwatchBook,
 } from 'lucide-react';
-import { designApi } from './client/design-api';
+import { designApi, visualAssetContentUrl } from './client/design-api';
 import { lintScreen } from './core/lint';
 import type {
   ComponentContract,
@@ -34,8 +34,8 @@ import type {
 } from './core/schema';
 import { initialScreenStateId, resolveScreenState, screenStateIds } from './core/schema';
 import { installTokenVariables } from './design-system/tokens';
-import { MockScreen } from './components/MockScreen';
 import { ProductWorkspace } from './components/ProductWorkspace';
+import { ReviewCanvas, type ReviewCanvasMode } from './components/ReviewCanvas';
 
 type WorkspaceView = 'product' | 'screens' | 'components' | 'tokens';
 type InspectorTab = 'inspect' | 'spec' | 'flow';
@@ -144,6 +144,8 @@ export default function App(): ReactElement {
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('inspect');
   const [editorText, setEditorText] = useState('');
   const [zoom, setZoom] = useState(0.78);
+  const [reviewMode, setReviewMode] = useState<ReviewCanvasMode>('device');
+  const [selectedReferenceId, setSelectedReferenceId] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
 
@@ -155,6 +157,20 @@ export default function App(): ReactElement {
   const issues = useMemo(() => resolvedSelected && context ? lintScreen(resolvedSelected, context.components) : [], [resolvedSelected, context]);
   const reviewProfiles = context?.designUnits.reviewProfiles ?? [];
   const reviewProfile = reviewProfiles.find((profile) => profile.id === reviewProfileId) ?? reviewProfiles[0] ?? null;
+  const compatibleReferences = useMemo(() => {
+    if (!context || !selected) return [];
+    const ownerUnits = new Set(context.designUnits.units.filter((unit) => unit.screenIds.includes(selected.id)).map((unit) => unit.id));
+    const available = new Set(context.visualAssetStatus.filter((status) => status.present).map((status) => status.assetId));
+    return context.visualAssets.assets.filter((asset) => {
+      if (asset.role !== 'reference' || !available.has(asset.id) || !asset.binding) return false;
+      if (asset.binding.screenId && asset.binding.screenId !== selected.id) return false;
+      if (asset.binding.stateId && asset.binding.stateId !== activeStateId) return false;
+      if (asset.binding.profileId && asset.binding.profileId !== reviewProfileId) return false;
+      if (asset.binding.designUnitId && !ownerUnits.has(asset.binding.designUnitId)) return false;
+      return asset.binding.screenId === selected.id || Boolean(asset.binding.designUnitId && ownerUnits.has(asset.binding.designUnitId));
+    });
+  }, [activeStateId, context, reviewProfileId, selected]);
+  const selectedReference = selectedReferenceId ? compatibleReferences.find((asset) => asset.id === selectedReferenceId) ?? null : null;
   const selectedFlows = useMemo(() => {
     if (!context?.product || !selected) return [];
     return context.product.flows.filter((flow) => flow.screenIds.includes(selected.id) || flow.entry?.screenId === selected.id || (flow.transitions ?? []).some((transition) => transition.from.screenId === selected.id || transition.to.screenId === selected.id || (transition.recovery ?? []).some((item) => item.target.screenId === selected.id)));
@@ -223,6 +239,11 @@ export default function App(): ReactElement {
     const availableStates = screenStateIds(selected);
     if (!availableStates.includes(activeStateId)) setActiveStateId(initialScreenStateId(selected));
   }, [selected, activeStateId]);
+
+  useEffect(() => {
+    if (!selectedReferenceId || compatibleReferences.some((asset) => asset.id === selectedReferenceId)) return;
+    setSelectedReferenceId('');
+  }, [compatibleReferences, selectedReferenceId]);
 
   useEffect(() => {
     if (!context) return;
@@ -433,7 +454,9 @@ export default function App(): ReactElement {
             <button onClick={() => void loadProjects()} disabled={busy}><RefreshCw className={busy ? 'spin' : ''} size={15} />刷新</button>
             {view === 'screens' && reviewProfile && <label className="device-select"><Smartphone size={15} /><select aria-label="Review Profile" value={reviewProfile.id} onChange={(event) => setReviewProfileId(event.target.value)}>{reviewProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select><ChevronDown size={13} /></label>}
             {view === 'screens' && selected && selectedStateIds.length > 1 && <label className="device-select"><Layers3 size={15} /><select aria-label="页面状态" value={activeStateId} onChange={(event) => setActiveStateId(event.target.value)}>{selected.states?.map((state) => <option key={state.id} value={state.id}>{state.name}</option>)}</select><ChevronDown size={13} /></label>}
-            {view === 'screens' && <label><span>{Math.round(zoom * 100)}%</span><input type="range" min="0.55" max="1" step="0.01" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label>}
+            {view === 'screens' && <label className="device-select"><Focus size={15} /><select aria-label="Review mode" value={reviewMode} onChange={(event) => setReviewMode(event.target.value as ReviewCanvasMode)}><option value="device">Device</option><option value="full-page">Full page</option><option value="fit">Fit</option></select><ChevronDown size={13} /></label>}
+            {view === 'screens' && compatibleReferences.length > 0 && <label className="device-select"><Layers3 size={15} /><select aria-label="Visual reference" value={selectedReference?.id ?? ''} onChange={(event) => setSelectedReferenceId(event.target.value)}><option value="">No reference</option>{compatibleReferences.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select><ChevronDown size={13} /></label>}
+            {view === 'screens' && <label><span>{reviewMode === 'fit' ? 'Auto' : `${Math.round(zoom * 100)}%`}</span><input aria-label="Review zoom" type="range" min="0.35" max="1.25" step="0.01" value={zoom} disabled={reviewMode === 'fit'} onChange={(event) => setZoom(Number(event.target.value))} /></label>}
           </div>
         </header>
         {notice && <div className={`notice ${notice.kind}`}>{notice.kind === 'success' ? <CheckCircle2 size={15} /> : <CircleAlert size={15} />}{notice.message}<button aria-label="关闭提示" onClick={() => setNotice(null)}>×</button></div>}
@@ -449,10 +472,17 @@ export default function App(): ReactElement {
             busy={busy}
           />
         ) : view === 'screens' && selected ? (
-          <div className="canvas-grid">
-            <div className="artboard-label" style={reviewProfile ? { width: reviewProfile.viewport.width } : undefined}><strong>{selected.name}</strong><span>{activeStateId}{reviewProfile ? ` · ${reviewProfile.name} · ${reviewProfile.viewport.width} × ${reviewProfile.viewport.height} · ${reviewProfile.textScale}× text` : ''}</span></div>
-            <div className="device-frame" data-color-scheme={reviewProfile?.colorScheme} data-contrast={reviewProfile?.contrast} data-reduce-motion={reviewProfile?.reduceMotion ? 'true' : 'false'} style={reviewProfile ? { ...reviewSurfaceStyle(reviewProfile, context.tokens), transform: `scale(${zoom})` } : { transform: `scale(${zoom})` }}><div className="dynamic-island" /><MockScreen key={`${selected.id}-${activeStateId}-${reviewProfile?.id ?? 'default'}`} spec={resolvedSelected ?? selected} components={context.components} onNavigateScreen={setSelectedId} /></div>
-          </div>
+          <ReviewCanvas
+            key={`${selected.id}-${activeStateId}-${reviewProfile?.id ?? 'default'}`}
+            spec={resolvedSelected ?? selected}
+            components={context.components}
+            profile={reviewProfile}
+            surfaceStyle={reviewProfile ? reviewSurfaceStyle(reviewProfile, context.tokens) : {}}
+            zoom={zoom}
+            mode={reviewMode}
+            reference={selectedReference}
+            referenceUrl={selectedReference ? visualAssetContentUrl(projectId, selectedReference.id) : null}
+          />
         ) : renderAssetWorkspace()}
       </section>
 

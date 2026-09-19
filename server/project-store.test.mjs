@@ -585,6 +585,13 @@ describe('ProjectStore visual authority assets', () => {
     expect(context.visualAssetStatus).toHaveLength(2);
     expect(context.visualAssetStatus.every((item) => item.present && item.contentSha256)).toBe(true);
     expect((await store.validateProject('fixture')).ok).toBe(true);
+    const historicalContent = await store.getVisualAssetContent('fixture', 'old-home');
+    expect(historicalContent.asset.role).toBe('reference');
+    expect(historicalContent.bytes.toString('utf8')).toContain('historical');
+    const artboardContent = await store.getVisualAssetContent('fixture', 'home-artboard');
+    expect(artboardContent.asset.role).toBe('design_artboard');
+    expect(artboardContent.bytes.toString('utf8')).toContain('artboard');
+    await expect(store.getVisualAssetContent('fixture', 'missing-asset')).rejects.toMatchObject({ code: 'VISUAL_ASSET_NOT_FOUND' });
 
     const changedRole = structuredClone(assets);
     changedRole.assets[0].role = 'runtime_evidence';

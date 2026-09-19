@@ -14,6 +14,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 const projectPath = (projectId: string, suffix = '') => `/api/design/projects/${encodeURIComponent(projectId)}${suffix}`;
 
+export const visualAssetContentUrl = (projectId: string, assetId: string) =>
+  projectPath(projectId, `/visual-assets/${encodeURIComponent(assetId)}/content`);
+
 export const designApi = {
   async listProjects(): Promise<DesignProjectSummary[]> {
     const payload = await request<{ projects: DesignProjectSummary[] }>('/api/design/projects');

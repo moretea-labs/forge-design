@@ -310,22 +310,28 @@ function sha256Bytes(value) {
   return createHash('sha256').update(value).digest('hex');
 }
 
+async function readVisualAssetBytes(project, asset) {
+  let bytes;
+  if (asset.provenance.kind === 'git_revision') {
+    const objectRef = asset.provenance.revision + ':' + asset.provenance.path;
+    const result = await execFileAsync('git', ['-C', project.root, 'show', objectRef], { encoding: null, maxBuffer: maxVisualAssetBytes });
+    bytes = result.stdout;
+  } else {
+    const absolutePath = resolve(project.root, asset.provenance.path);
+    const repositoryRelative = relative(project.root, absolutePath);
+    assert(repositoryRelative !== '..' && !repositoryRelative.startsWith('../'), 'Visual asset ' + asset.id + ' escapes the repository.', 'VISUAL_ASSET_PATH_INVALID');
+    bytes = await readFile(absolutePath);
+  }
+  assert(Buffer.isBuffer(bytes), 'Visual asset ' + asset.id + ' did not resolve to binary content.', 'VISUAL_ASSET_CONTENT_INVALID');
+  assert(bytes.length <= maxVisualAssetBytes, 'Visual asset ' + asset.id + ' exceeds the 64 MiB review limit.', 'VISUAL_ASSET_TOO_LARGE');
+  return bytes;
+}
+
 async function resolveVisualAssetStatus(project, document) {
   const statuses = [];
   for (const asset of document.assets) {
     try {
-      let bytes;
-      if (asset.provenance.kind === 'git_revision') {
-        const objectRef = asset.provenance.revision + ':' + asset.provenance.path;
-        const result = await execFileAsync('git', ['-C', project.root, 'show', objectRef], { encoding: 'buffer', maxBuffer: maxVisualAssetBytes });
-        bytes = result.stdout;
-      } else {
-        const absolutePath = resolve(project.root, asset.provenance.path);
-        const repositoryRelative = relative(project.root, absolutePath);
-        assert(repositoryRelative !== '..' && !repositoryRelative.startsWith('../'), 'Visual asset ' + asset.id + ' escapes the repository.', 'VISUAL_ASSET_PATH_INVALID');
-        bytes = await readFile(absolutePath);
-      }
-      assert(bytes.length <= maxVisualAssetBytes, 'Visual asset ' + asset.id + ' exceeds the 64 MiB review limit.', 'VISUAL_ASSET_TOO_LARGE');
+      const bytes = await readVisualAssetBytes(project, asset);
       statuses.push({ assetId: asset.id, role: asset.role, present: true, contentSha256: sha256Bytes(bytes), error: null });
     } catch (error) {
       statuses.push({ assetId: asset.id, role: asset.role, present: false, contentSha256: null, error: error.code ?? error.message ?? 'VISUAL_ASSET_UNAVAILABLE' });
@@ -886,6 +892,20 @@ export class ProjectStore {
     assertVisualAssetRolesUnchanged(current, document);
     await writeJsonAtomic(join(project.storagePath, 'visual-assets.json'), document);
     return structuredClone(document);
+  }
+
+  async getVisualAssetContent(projectId, assetId) {
+    assertSafeId(assetId, 'asset');
+    const project = await this.resolveProject(projectId);
+    const document = await this.getVisualAssets(projectId);
+    const asset = document.assets.find((item) => item.id === assetId);
+    if (!asset) throw new DesignStoreError('Visual asset not found: ' + assetId + '.', 404, 'VISUAL_ASSET_NOT_FOUND');
+    const bytes = await readVisualAssetBytes(project, asset);
+    return {
+      asset: structuredClone(asset),
+      bytes,
+      contentSha256: sha256Bytes(bytes),
+    };
   }
 
   async designUnitDigest(projectId, unitId) {

@@ -10,6 +10,16 @@ function sendText(response, status, body, contentType = 'text/plain; charset=utf
   response.end(body);
 }
 
+function sendBytes(response, status, bytes, contentType, contentSha256) {
+  response.statusCode = status;
+  response.setHeader('Content-Type', contentType);
+  response.setHeader('Content-Length', String(bytes.length));
+  response.setHeader('Cache-Control', 'no-store');
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.setHeader('ETag', '"' + contentSha256 + '"');
+  response.end(bytes);
+}
+
 function sendJson(response, status, body) {
   response.statusCode = status;
   response.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -89,6 +99,13 @@ export function designHarnessApiPlugin(options = {}) {
           if (resource === 'components') {
             if (method === 'GET') return sendJson(response, 200, await store.getComponents(projectId));
             if (method === 'PUT') return sendJson(response, 200, await store.putComponents(projectId, await readJsonBody(request)));
+          }
+          if (resource === 'visual-assets') {
+            const assetId = segments[5];
+            const action = segments[6];
+            if (!assetId || action !== 'content' || method !== 'GET') throw new DesignStoreError('Unknown visual asset route.', 404, 'ROUTE_NOT_FOUND');
+            const content = await store.getVisualAssetContent(projectId, assetId);
+            return sendBytes(response, 200, content.bytes, content.asset.mediaType, content.contentSha256);
           }
           if (resource === 'screens') {
             if (segments.length === 5 && method === 'GET') return sendJson(response, 200, { screens: await store.listScreens(projectId) });
