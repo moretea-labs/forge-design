@@ -2,6 +2,18 @@ const attributePattern = /([\w:-]+)\s*=\s*["']([^"']*)["']/g;
 const regionTagPattern = /<[^>]+\bdata-fd-region\s*=\s*["'][^"']+["'][^>]*>/gi;
 const epsilon = 0.5;
 
+function intrinsicArtboardDimensions(svg, viewport = {}) {
+  const root = String(svg ?? '').match(/<svg\b[^>]*>/i)?.[0] ?? '';
+  const viewBox = root.match(/\bviewBox\s*=\s*["']\s*[-+]?\d*\.?\d+\s+[-+]?\d*\.?\d+\s+([-+]?\d*\.?\d+)\s+([-+]?\d*\.?\d+)\s*["']/i);
+  const width = viewBox ? Number(viewBox[1]) : Number(root.match(/\bwidth\s*=\s*["']\s*([-+]?\d*\.?\d+)(?:px)?\s*["']/i)?.[1]);
+  const height = viewBox ? Number(viewBox[2]) : Number(root.match(/\bheight\s*=\s*["']\s*([-+]?\d*\.?\d+)(?:px)?\s*["']/i)?.[1]);
+  return {
+    width: Number.isFinite(width) && width > 0 ? width : Number(viewport.width),
+    height: Number.isFinite(height) && height > 0 ? height : Number(viewport.height),
+  };
+}
+
+
 function attributesForTag(tag) {
   const attributes = {};
   let match;
@@ -50,8 +62,9 @@ export function parseDeclaredArtboardRegions(svg) {
 }
 
 export function analyzeDeclaredArtboardLayout(svg, viewport = {}) {
-  const width = Number(viewport.width);
-  const height = Number(viewport.height);
+  const viewportWidth = Number(viewport.width);
+  const viewportHeight = Number(viewport.height);
+  const { width: artboardWidth, height: artboardHeight } = intrinsicArtboardDimensions(svg, viewport);
   const safeTop = Number(viewport.safeTop ?? 0);
   const safeBottom = Number(viewport.safeBottom ?? 0);
   const regions = parseDeclaredArtboardRegions(svg);
@@ -69,11 +82,11 @@ export function analyzeDeclaredArtboardLayout(svg, viewport = {}) {
       issues.push({ code: 'invalid_bounds', regions: [region.id], message: 'Layout region ' + region.id + ' requires data-fd-box="x y width height" with positive dimensions.' });
       continue;
     }
-    if (Number.isFinite(width) && Number.isFinite(height) && !contains({ x: 0, y: 0, width, height }, region.box)) {
+    if (Number.isFinite(artboardWidth) && Number.isFinite(artboardHeight) && !contains({ x: 0, y: 0, width: artboardWidth, height: artboardHeight }, region.box)) {
       issues.push({ code: 'artboard_out_of_bounds', regions: [region.id], message: 'Layout region ' + region.id + ' extends outside the artboard bounds.' });
     }
-    if (region.safeArea === 'content' && Number.isFinite(width) && Number.isFinite(height)) {
-      const safeBox = { x: 0, y: safeTop, width, height: Math.max(0, height - safeTop - safeBottom) };
+    if (region.safeArea === 'content' && Number.isFinite(viewportWidth) && Number.isFinite(viewportHeight)) {
+      const safeBox = { x: 0, y: safeTop, width: viewportWidth, height: Math.max(0, viewportHeight - safeTop - safeBottom) };
       if (!contains(safeBox, region.box)) issues.push({ code: 'safe_area_violation', regions: [region.id], message: 'Layout region ' + region.id + ' violates the content safe area.' });
     }
   }

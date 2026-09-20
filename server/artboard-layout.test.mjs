@@ -17,6 +17,17 @@ describe('analyzeDeclaredArtboardLayout', () => {
     expect(codes).toContain('safe_area_violation');
   });
 
+  it('uses intrinsic artboard height for scroll content while keeping viewport safe-area semantics explicit', () => {
+    const svg = '<svg viewBox="0 0 393 1385"><g data-fd-region="hero" data-fd-box="16 70 361 300" data-fd-safe-area="content"></g><g data-fd-region="monitoring" data-fd-box="16 453 361 629" data-fd-overlap-group="flow"></g><g data-fd-region="reminders" data-fd-box="16 1096 361 165" data-fd-overlap-group="flow"></g></svg>';
+    expect(analyzeDeclaredArtboardLayout(svg, viewport)).toMatchObject({ status: 'pass', issues: [] });
+
+    const overflow = '<svg viewBox="0 0 393 1385"><g data-fd-region="reminders" data-fd-box="16 1360 361 60"></g></svg>';
+    expect(analyzeDeclaredArtboardLayout(overflow, viewport).issues.map((issue) => issue.code)).toContain('artboard_out_of_bounds');
+
+    const viewportSafeArea = '<svg viewBox="0 0 393 1385"><g data-fd-region="scroll-region" data-fd-box="16 900 361 120" data-fd-safe-area="content"></g></svg>';
+    expect(analyzeDeclaredArtboardLayout(viewportSafeArea, viewport).issues.map((issue) => issue.code)).toContain('safe_area_violation');
+  });
+
   it('allows intentional overlap and keeps legacy artboards readable', () => {
     const legacy = '<svg viewBox="0 0 393 852"><rect width="393" height="852"/></svg>';
     expect(analyzeDeclaredArtboardLayout(legacy, viewport).status).toBe('unannotated');

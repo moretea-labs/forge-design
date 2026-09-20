@@ -14,6 +14,25 @@ describe('artboard layout client diagnostics', () => {
     expect(report.issues.some((issue) => issue.code === 'sibling_overlap')).toBe(true);
   });
 
+  it('separates tall artboard bounds from the device viewport safe area', () => {
+    const monitoring = region('monitoring', { x: 16, y: 900, width: 361, height: 120 });
+    const report = analyzeDeclaredLayout(
+      [monitoring],
+      { width: 393, height: 852, safeTop: 54, safeBottom: 30 },
+      { width: 393, height: 1385 },
+    );
+    expect(report.issues.some((issue) => issue.code === 'artboard_out_of_bounds')).toBe(false);
+    expect(report.issues.some((issue) => issue.code === 'safe_area_violation')).toBe(false);
+
+    const viewportSafe = { ...monitoring, safeArea: 'content' };
+    const safeReport = analyzeDeclaredLayout(
+      [viewportSafe],
+      { width: 393, height: 852, safeTop: 54, safeBottom: 30 },
+      { width: 393, height: 1385 },
+    );
+    expect(safeReport.issues.some((issue) => issue.code === 'safe_area_violation')).toBe(true);
+  });
+
   it('detects rendered content escaping declared bounds', () => {
     const regions = [region('card', { x: 16, y: 100, width: 361, height: 100 })];
     const actual = new Map([['card', { x: 16, y: 100, width: 370, height: 112 }]]);

@@ -47,11 +47,12 @@ export function parseDeclaredLayoutRegions(svg: string): LayoutRegion[] {
 export function analyzeDeclaredLayout(
   regions: LayoutRegion[],
   viewport: { width: number; height: number; safeTop?: number; safeBottom?: number },
+  artboardDimensions: { width: number; height: number } = viewport,
 ): LayoutReport {
   if (regions.length === 0) return { status: 'unannotated', issues: [], regions };
   const issues: LayoutIssue[] = [];
   const byId = new Map<string, LayoutRegion>();
-  const artboard = { x: 0, y: 0, width: viewport.width, height: viewport.height };
+  const artboard = { x: 0, y: 0, width: artboardDimensions.width, height: artboardDimensions.height };
   const safeBox = { x: 0, y: viewport.safeTop ?? 0, width: viewport.width, height: Math.max(0, viewport.height - (viewport.safeTop ?? 0) - (viewport.safeBottom ?? 0)) };
 
   for (const region of regions) {

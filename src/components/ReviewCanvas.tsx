@@ -59,6 +59,8 @@ export function ReviewCanvas({
   const [layoutStatus, setLayoutStatus] = useState<'pass' | 'fail' | 'unannotated' | 'loading'>('loading');
   const screenWidth = profile?.viewport.width ?? 393;
   const screenHeight = profile?.viewport.height ?? 852;
+  const artboardWidth = artboard?.dimensions?.width ?? screenWidth;
+  const artboardHeight = artboard?.dimensions?.height ?? screenHeight;
   const frameWidth = screenWidth + framePadding;
   const frameHeight = screenHeight + framePadding;
   const comparing = Boolean(reference && referenceUrl);
@@ -91,7 +93,11 @@ export function ReviewCanvas({
       const svg = await fetch(artboardUrl, { signal: controller.signal }).then((response) => response.text());
       if (controller.signal.aborted) return;
       const regions = parseDeclaredLayoutRegions(svg);
-      const declared = analyzeDeclaredLayout(regions, { width: screenWidth, height: screenHeight, safeTop: profile?.viewport.safeTop, safeBottom: profile?.viewport.safeBottom });
+      const declared = analyzeDeclaredLayout(
+        regions,
+        { width: screenWidth, height: screenHeight, safeTop: profile?.viewport.safeTop, safeBottom: profile?.viewport.safeBottom },
+        { width: artboardWidth, height: artboardHeight },
+      );
       setLayoutRegions(regions);
       if (declared.status === 'unannotated') {
         setLayoutIssues([]);
@@ -105,8 +111,8 @@ export function ReviewCanvas({
         return;
       }
       analysisNode = document.importNode(documentNode, true) as SVGSVGElement;
-      analysisNode.style.width = screenWidth + 'px';
-      analysisNode.style.height = screenHeight + 'px';
+      analysisNode.style.width = artboardWidth + 'px';
+      analysisNode.style.height = artboardHeight + 'px';
       const host = analysisHostRef.current;
       if (!host) return;
       host.replaceChildren(analysisNode);
@@ -132,7 +138,7 @@ export function ReviewCanvas({
       controller.abort();
       if (analysisNode?.parentNode) analysisNode.parentNode.removeChild(analysisNode);
     };
-  }, [artboardUrl, lane, profile?.viewport.safeBottom, profile?.viewport.safeTop, screenHeight, screenWidth]);
+  }, [artboardHeight, artboardUrl, artboardWidth, lane, profile?.viewport.safeBottom, profile?.viewport.safeTop, screenHeight, screenWidth]);
 
   const scale = mode === 'fit' ? fitScale : zoom;
   const modeLabel = mode === 'device'
