@@ -135,6 +135,27 @@ The production implementation may later bind to the accepted component contract,
 
 Only after product hierarchy and interaction are stable should the workflow choose typography roles, color roles, spacing, radius, surfaces, icon treatment, and other tokens.
 
+### Objective Artboard Layout Quality
+
+A high-fidelity Artboard is not visually reviewable merely because the SVG is syntactically valid. Before `visual_reviewed` or Human Acceptance, Forge Design must also establish objective layout quality for the exact Screen / State / Review Profile.
+
+Critical layout regions should annotate the canonical Artboard with:
+
+- `data-fd-region="<stable-region-id>"`;
+- `data-fd-box="x y width height"` in Artboard coordinates;
+- optional `data-fd-container="<region-id>"` when the region must stay inside a parent layout region;
+- optional `data-fd-overlap-group="<group-id>"` for siblings that must not geometrically overlap;
+- optional `data-fd-overlap="allow"` only for intentional compositing such as decorative glow/background layers;
+- optional `data-fd-safe-area="content"` when the region must remain inside the review profile's content safe area.
+
+Forge Design applies two checks:
+
+1. deterministic declared-layout checks during project validation: Artboard bounds, safe area, container containment and forbidden sibling overlap;
+2. rendered Review Canvas checks using actual browser geometry so text/icons transformed by real fonts and SVG transforms cannot silently escape their declared region.
+
+Legacy unannotated Artboards remain readable for compatibility, but they are explicitly reported as `Layout quality · Review missing` and cannot qualify a Design Unit for `visual_reviewed`. Layout Quality is an objective prerequisite only; it does not replace human evaluation of hierarchy, density, aesthetics, comprehension or product correctness.
+
+
 Tokens enforce implementation consistency. They cannot rescue an incorrect product model, information hierarchy, or interaction flow.
 
 ### Visual authority layers

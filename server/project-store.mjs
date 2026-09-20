@@ -7,6 +7,7 @@ import { basename, delimiter, dirname, join, relative, resolve } from 'node:path
 import { fileURLToPath } from 'node:url';
 import { DesignMarkdownError, parseDesignMarkdown, renderDesignMarkdown } from './design-markdown.mjs';
 import { SchemaValidationError, loadCanonicalSchema, validateCanonicalDocument } from './schema-validator.mjs';
+import { analyzeDeclaredArtboardLayout } from './artboard-layout.mjs';
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 export const repositoryRoot = resolve(moduleDirectory, '..');
@@ -1337,6 +1338,7 @@ export class ProjectStore {
 
   async validateProject(projectId) {
     const context = await this.getContext(projectId);
+    const project = await this.resolveProject(projectId);
     const screenIds = new Set(context.screens.map((screen) => screen.id));
     const errors = [];
     const warnings = [];
@@ -1402,6 +1404,22 @@ export class ProjectStore {
     for (const status of context.visualAssetStatus) {
       if (!status.present) errors.push('Visual asset ' + status.assetId + ' cannot be resolved from its declared provenance: ' + status.error + '.');
     }
+    const reviewProfilesById = new Map((context.designUnits.reviewProfiles ?? []).map((profile) => [profile.id, profile]));
+    const layoutQuality = [];
+    for (const asset of context.visualAssets.assets.filter((item) => item.role === 'design_artboard')) {
+      try {
+        const bytes = await readVisualAssetBytes(project, asset);
+        const profile = reviewProfilesById.get(asset.binding?.profileId);
+        const viewport = profile?.viewport ?? { width: asset.dimensions?.width, height: asset.dimensions?.height, safeTop: 0, safeBottom: 0 };
+        const report = analyzeDeclaredArtboardLayout(bytes.toString('utf8'), viewport);
+        layoutQuality.push({ assetId: asset.id, binding: asset.binding, ...report });
+        if (report.status === 'fail') for (const issue of report.issues) errors.push('Artboard layout ' + asset.id + ': ' + issue.message);
+        else if (report.status === 'unannotated') warnings.push('Artboard layout ' + asset.id + ' has no data-fd-region layout annotations; objective geometry review is missing.');
+      } catch (error) {
+        errors.push('Artboard layout ' + asset.id + ' could not be analyzed: ' + (error instanceof Error ? error.message : String(error)) + '.');
+      }
+    }
+    const layoutByAssetId = new Map(layoutQuality.map((item) => [item.assetId, item]));
     const usedReviewProfileIds = new Set(context.designUnits.units.flatMap((unit) => unit.review?.profileIds ?? []));
     for (const profileId of context.designUnits.freeze?.profileIds ?? []) usedReviewProfileIds.add(profileId);
     for (const profile of context.designUnits.reviewProfiles ?? []) {
@@ -1415,6 +1433,10 @@ export class ProjectStore {
         if (coverage.missing.length > 0) {
           const missing = coverage.missing.map((item) => `${item.screenId}/${item.stateId}@${item.profileId}`).join(', ');
           errors.push(`Design unit ${unit.id} is visual_reviewed without complete high-fidelity design artboard coverage: ${missing}.`);
+        }
+        for (const item of coverage.present) {
+          const report = layoutByAssetId.get(item.assetId);
+          if (!report || report.status !== 'pass') errors.push(`Design unit ${unit.id} is visual_reviewed without passing Artboard Layout Quality for ${item.screenId}/${item.stateId}@${item.profileId}.`);
         }
       }
       if (unit.review?.acceptance) {
@@ -1434,7 +1456,7 @@ export class ProjectStore {
         errors.push(`Golden is marked approved before all gates pass: ${context.goldenGate.blockers.join(' ')}`);
       }
     }
-    return { ok: errors.length === 0, projectId, errors, warnings, goldenGate: context.goldenGate };
+    return { ok: errors.length === 0, projectId, errors, warnings, layoutQuality, goldenGate: context.goldenGate };
   }
 
   async initProject({ projectRoot, id, name }) {

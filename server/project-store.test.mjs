@@ -50,7 +50,7 @@ async function createReviewCandidate() {
     screenId: 'home',
     stateId: 'normal',
     profileId: 'standard-light',
-    svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 393 852"><rect width="393" height="852" fill="#fff"/><text x="24" y="80">Home design</text></svg>',
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 393 852"><g data-fd-region="content" data-fd-box="16 60 361 760" data-fd-safe-area="content"><rect x="16" y="60" width="361" height="760" fill="#fff"/><text x="24" y="80">Home design</text></g></svg>',
   });
   const units = await fixture.store.getDesignUnits('fixture');
   units.units[0].review = {
@@ -655,7 +655,7 @@ describe('ProjectStore visual authority assets', () => {
     const artboardPath = join(harness, 'artboards', 'home.svg');
     const referencePath = join(harness, 'evidence', 'home-reference.svg');
     const runtimePath = join(harness, 'evidence', 'home-runtime.svg');
-    await writeFile(artboardPath, '<svg xmlns="http://www.w3.org/2000/svg"><text>design-v1</text></svg>', 'utf8');
+    await writeFile(artboardPath, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 393 852"><g data-fd-region="content" data-fd-box="16 60 361 760" data-fd-safe-area="content"><text x="24" y="80">design-v1</text></g></svg>', 'utf8');
     await writeFile(referencePath, '<svg xmlns="http://www.w3.org/2000/svg"><text>reference-v1</text></svg>', 'utf8');
     await writeFile(runtimePath, '<svg xmlns="http://www.w3.org/2000/svg"><text>runtime-v1</text></svg>', 'utf8');
     await store.putVisualAssets('fixture', {
@@ -674,7 +674,7 @@ describe('ProjectStore visual authority assets', () => {
     await writeFile(runtimePath, '<svg xmlns="http://www.w3.org/2000/svg"><text>runtime-v2</text></svg>', 'utf8');
     expect((await store.getDesignReviewStatus('fixture')).units[0]).toMatchObject({ acceptanceCurrent: true, currentDigest: acceptedDigest });
 
-    await writeFile(artboardPath, '<svg xmlns="http://www.w3.org/2000/svg"><text>design-v2</text></svg>', 'utf8');
+    await writeFile(artboardPath, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 393 852"><g data-fd-region="content" data-fd-box="16 60 361 760" data-fd-safe-area="content"><text x="24" y="80">design-v2</text></g></svg>', 'utf8');
     expect((await store.getDesignReviewStatus('fixture')).units[0].acceptanceCurrent).toBe(false);
   });
 });
@@ -736,6 +736,27 @@ describe('ProjectStore visual authority assets', () => {
   });
 
 describe('ProjectStore human acceptance and freeze authority', () => {
+  it('keeps unannotated artboards readable but blocks visual_reviewed acceptance quality', async () => {
+    const { store } = await createFixture();
+    await store.putDesignArtboard('fixture', {
+      designUnitId: 'primary',
+      screenId: 'home',
+      stateId: 'normal',
+      profileId: 'standard-light',
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 393 852"><rect width="393" height="852" fill="#fff"/></svg>',
+    });
+    const draftValidation = await store.validateProject('fixture');
+    expect(draftValidation.ok).toBe(true);
+    expect(draftValidation.warnings.join(' ')).toContain('objective geometry review is missing');
+
+    const units = await store.getDesignUnits('fixture');
+    units.units[0].review = { status: 'visual_reviewed', profileIds: ['standard-light'], artifactRefs: ['artifact://home'], notes: [] };
+    await store.putDesignUnits('fixture', units);
+    const reviewedValidation = await store.validateProject('fixture');
+    expect(reviewedValidation.ok).toBe(false);
+    expect(reviewedValidation.errors.join(' ')).toContain('without passing Artboard Layout Quality');
+  });
+
   it('protects acceptance evidence from ordinary design writes', async () => {
     const { store } = await createFixture();
     const units = await store.getDesignUnits('fixture');

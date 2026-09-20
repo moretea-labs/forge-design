@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
+import { analyzeDeclaredLayout, parseDeclaredLayoutRegions, renderedOverflowIssues, type LayoutIssue, type LayoutRegion } from '../core/artboard-layout';
 import type { ComponentContractsDocument, DesignReviewProfile, ScreenSpec, VisualAsset } from '../core/schema';
 import { MockScreen } from './MockScreen';
 
@@ -51,7 +52,11 @@ export function ReviewCanvas({
   referenceUrl,
 }: Props): ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
+  const analysisHostRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(1);
+  const [layoutRegions, setLayoutRegions] = useState<LayoutRegion[]>([]);
+  const [layoutIssues, setLayoutIssues] = useState<LayoutIssue[]>([]);
+  const [layoutStatus, setLayoutStatus] = useState<'pass' | 'fail' | 'unannotated' | 'loading'>('loading');
   const screenWidth = profile?.viewport.width ?? 393;
   const screenHeight = profile?.viewport.height ?? 852;
   const frameWidth = screenWidth + framePadding;
@@ -71,6 +76,63 @@ export function ReviewCanvas({
     observer.observe(host);
     return () => observer.disconnect();
   }, [comparing, frameHeight, frameWidth, mode]);
+
+  useEffect(() => {
+    if (lane !== 'artboard' || !artboardUrl) {
+      setLayoutRegions([]);
+      setLayoutIssues([]);
+      setLayoutStatus('unannotated');
+      return;
+    }
+    const controller = new AbortController();
+    let analysisNode: SVGSVGElement | null = null;
+    const run = async () => {
+      setLayoutStatus('loading');
+      const svg = await fetch(artboardUrl, { signal: controller.signal }).then((response) => response.text());
+      if (controller.signal.aborted) return;
+      const regions = parseDeclaredLayoutRegions(svg);
+      const declared = analyzeDeclaredLayout(regions, { width: screenWidth, height: screenHeight, safeTop: profile?.viewport.safeTop, safeBottom: profile?.viewport.safeBottom });
+      setLayoutRegions(regions);
+      if (declared.status === 'unannotated') {
+        setLayoutIssues([]);
+        setLayoutStatus('unannotated');
+        return;
+      }
+      const documentNode = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
+      if (!(documentNode instanceof SVGSVGElement)) {
+        setLayoutIssues([{ code: 'render_parse_failed', regions: [], message: 'Artboard SVG could not be rendered for layout diagnostics.' }]);
+        setLayoutStatus('fail');
+        return;
+      }
+      analysisNode = document.importNode(documentNode, true) as SVGSVGElement;
+      analysisNode.style.width = screenWidth + 'px';
+      analysisNode.style.height = screenHeight + 'px';
+      const host = analysisHostRef.current;
+      if (!host) return;
+      host.replaceChildren(analysisNode);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const rootBounds = analysisNode.getBoundingClientRect();
+      const actual = new Map<string, { x: number; y: number; width: number; height: number }>();
+      for (const element of analysisNode.querySelectorAll<SVGGraphicsElement>('[data-fd-region]')) {
+        const id = element.getAttribute('data-fd-region');
+        if (!id) continue;
+        const bounds = element.getBoundingClientRect();
+        actual.set(id, { x: bounds.left - rootBounds.left, y: bounds.top - rootBounds.top, width: bounds.width, height: bounds.height });
+      }
+      const issues = [...declared.issues, ...renderedOverflowIssues(regions, actual)];
+      setLayoutIssues(issues);
+      setLayoutStatus(issues.length > 0 ? 'fail' : 'pass');
+    };
+    run().catch((error: unknown) => {
+      if (controller.signal.aborted) return;
+      setLayoutIssues([{ code: 'layout_analysis_failed', regions: [], message: error instanceof Error ? error.message : String(error) }]);
+      setLayoutStatus('fail');
+    });
+    return () => {
+      controller.abort();
+      if (analysisNode?.parentNode) analysisNode.parentNode.removeChild(analysisNode);
+    };
+  }, [artboardUrl, lane, profile?.viewport.safeBottom, profile?.viewport.safeTop, screenHeight, screenWidth]);
 
   const scale = mode === 'fit' ? fitScale : zoom;
   const modeLabel = mode === 'device'
@@ -107,9 +169,18 @@ export function ReviewCanvas({
     </div>
   );
 
+  const layoutHighlights = (coordinateScale = 1) => layoutStatus === 'fail'
+    ? layoutIssues.flatMap((issue) => issue.regions).filter((id, index, all) => all.indexOf(id) === index).map((id) => {
+      const region = layoutRegions.find((item) => item.id === id);
+      if (!region?.box) return null;
+      return <span key={id} className="artboard-layout-highlight" title={id} style={{ left: region.box.x * coordinateScale, top: region.box.y * coordinateScale, width: region.box.width * coordinateScale, height: region.box.height * coordinateScale }} />;
+    })
+    : null;
+
   const artboardSurface = mode === 'full-page' ? (
     <div className="review-artboard-full-page" style={{ width: screenWidth * scale, minHeight: screenHeight * scale }}>
       {artboardContent}
+      {layoutHighlights(scale)}
     </div>
   ) : (
     <div className="review-scaled-frame" style={{ width: frameWidth * scale, height: frameHeight * scale }}>
@@ -123,6 +194,7 @@ export function ReviewCanvas({
         <div className="dynamic-island" />
         <div className="artboard-viewport" style={{ width: screenWidth, height: screenHeight }}>
           {artboardContent}
+          {layoutHighlights()}
         </div>
       </div>
     </div>
@@ -153,7 +225,13 @@ export function ReviewCanvas({
       <div className="review-columns">
         <section className="review-column">
           <div className="review-column-label"><strong>{spec.name} · {laneLabel}</strong><span>{authorityLabel} · {modeLabel} · {Math.round(scale * 100)}%</span></div>
+          {lane === 'artboard' ? <div className={'artboard-layout-quality ' + layoutStatus}>
+            <strong>{layoutStatus === 'pass' ? 'Layout quality · Pass' : layoutStatus === 'unannotated' ? 'Layout quality · Review missing' : layoutStatus === 'loading' ? 'Layout quality · Checking…' : 'Layout quality · ' + layoutIssues.length + ' issue' + (layoutIssues.length === 1 ? '' : 's')}</strong>
+            {layoutStatus === 'fail' ? <ul>{layoutIssues.slice(0, 5).map((issue, index) => <li key={issue.code + '-' + index}>{issue.message}</li>)}</ul> : null}
+            {layoutStatus === 'unannotated' ? <span>Add data-fd-region / data-fd-box annotations before visual_reviewed.</span> : null}
+          </div> : null}
           <div className="review-surface-slot">{currentSurface}</div>
+          <div className="artboard-layout-analysis-host" aria-hidden="true" ref={analysisHostRef} />
         </section>
         {referenceSurface && reference ? (
           <section className="review-column reference-column">

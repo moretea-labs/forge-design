@@ -289,3 +289,13 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .review-artboard-empty span { max-width: 300px; font-size: var(--type-body-size); line-height: var(--type-body-line); }
 .review-canvas[data-mode="device"] .artboard-viewport { scrollbar-width: thin; }
 .authority-note { margin-top: var(--space-md) !important; color: var(--color-chrome-text-subtle) !important; }
+
+.artboard-viewport, .review-artboard-full-page { position: relative; }
+.artboard-layout-highlight { position: absolute; z-index: 3; pointer-events: none; border: 2px solid var(--color-danger); border-radius: 6px; background: var(--color-warning-surface); box-shadow: inset 0 0 0 1px var(--color-subtle-border); }
+.artboard-layout-quality { width: min(100%, 520px); border: 1px solid var(--color-chrome-border); border-radius: 10px; padding: 8px 10px; display: grid; gap: 4px; font-size: 10px; color: var(--color-chrome-text-subtle); background: var(--color-panel-surface); }
+.artboard-layout-quality strong { color: var(--color-chrome-text); font-size: 10px; }
+.artboard-layout-quality.pass { border-color: var(--color-success); background: var(--color-success-surface); }
+.artboard-layout-quality.fail { border-color: var(--color-danger); background: var(--color-warning-surface); }
+.artboard-layout-quality.unannotated { border-color: var(--color-warning); background: var(--color-warning-surface); }
+.artboard-layout-quality ul { margin: 2px 0 0; padding-left: 16px; display: grid; gap: 2px; }
+.artboard-layout-analysis-host { position: fixed; left: -10000px; top: 0; visibility: hidden; pointer-events: none; width: 1px; height: 1px; overflow: visible; }
