@@ -58,6 +58,7 @@ function reviewSurfaceStyle(profile: DesignReviewProfile, tokens: DesignTokens):
     '--review-safe-bottom': `${profile.viewport.safeBottom}px`,
   };
   Object.entries(colors).forEach(([name, value]) => { style[`--color-${toKebab(name)}`] = value; });
+  Object.entries(tokens.material ?? {}).forEach(([name, material]) => { style[`--material-${toKebab(name)}-tint`] = material.tint ?? 'transparent'; style[`--material-${toKebab(name)}-blur`] = `${material.blur ?? 0}px`; style[`--material-${toKebab(name)}-opacity`] = String(material.opacity ?? 1); });
   Object.entries(tokens.typography).forEach(([name, type]) => {
     style[`--type-${toKebab(name)}-size`] = `${type.size * profile.textScale}px`;
     style[`--type-${toKebab(name)}-line`] = `${type.lineHeight * profile.textScale}px`;
@@ -94,13 +95,13 @@ function parseDocument<T>(source: string): T {
   return JSON.parse(source) as T;
 }
 
-function newScreen(): ScreenSpec {
+function newScreen(profile: DesignReviewProfile | null): ScreenSpec {
   const id = `screen-${Date.now().toString(36)}`;
   return {
     schemaVersion: 1,
     id,
     name: '新画板',
-    device: 'iphone-16-pro',
+    ...(profile ? { viewport: { ...profile.viewport } } : {}),
     goal: '先定义这个页面要帮助用户完成什么。',
     primaryAction: 'continue',
     constraints: ['只使用当前项目注册的组件和 Token。'],
@@ -306,7 +307,7 @@ export default function App(): ReactElement {
   const createScreen = async () => {
     if (!context) return;
     setBusy(true);
-    const screen = newScreen();
+    const screen = newScreen(reviewProfile);
     try {
       await designApi.createScreen(projectId, screen);
       setView('screens');
@@ -501,6 +502,7 @@ export default function App(): ReactElement {
             key={`${selected.id}-${activeStateId}-${reviewProfile?.id ?? 'default'}-${reviewLane}`}
             spec={resolvedSelected ?? selected}
             components={context.components}
+            tokens={context.tokens}
             profile={reviewProfile}
             surfaceStyle={reviewProfile ? reviewSurfaceStyle(reviewProfile, context.tokens) : {}}
             zoom={zoom}

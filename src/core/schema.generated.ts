@@ -32,12 +32,19 @@ export type DesignTokens = ({
     "lineHeight": number;
     "weight": number;
   } & Record<string, unknown>)>;
-  "device": ({
+  "device"?: ({
     "iphoneWidth": number;
     "iphoneHeight": number;
     "safeTop": number;
     "safeBottom": number;
   } & Record<string, unknown>);
+  "material"?: Record<string, {
+    "kind": "solid" | "translucent" | "glass" | "vibrancy";
+    "platform"?: "ios" | "android" | "macos" | "windows" | "web" | "other";
+    "tint"?: string;
+    "blur"?: number;
+    "opacity"?: number;
+  }>;
 } & Record<string, unknown>);
 
 export type ComponentContractsDocument = {
@@ -83,7 +90,7 @@ export type ComponentContractsDocument = {
     "preview"?: {
       "nodes": Array<{
         "id": string;
-        "primitive": "stack" | "text" | "icon" | "surface" | "divider" | "spacer" | "button" | "value" | "badge" | "progress";
+        "primitive": "stack" | "text" | "icon" | "surface" | "divider" | "spacer" | "button" | "value" | "badge" | "progress" | "grid" | "scroll" | "layer" | "shape" | "image" | "path" | "input" | "toggle" | "segmented" | "menu" | "selection" | "list" | "table" | "outline" | "collection";
         "parentId"?: string;
         "content"?: {
           "kind": "literal" | "prop";
@@ -102,6 +109,11 @@ export type ComponentContractsDocument = {
           "alignment"?: "leading" | "center" | "trailing" | "stretch";
           "justify"?: "start" | "center" | "between" | "end";
           "width"?: "fill" | "hug";
+          "height"?: "fill" | "hug";
+          "overflow"?: "visible" | "hidden" | "auto";
+          "columns"?: number;
+          "shadow"?: string;
+          "material"?: string;
         };
         "when"?: {
           "variants"?: Array<string>;
@@ -208,7 +220,7 @@ export type ScreenSpec = {
   "schemaVersion": 1;
   "id": string;
   "name": string;
-  "device": "iphone-16-pro";
+  "device"?: "iphone-16-pro";
   "goal": string;
   "primaryAction": string;
   "constraints": Array<string>;
@@ -219,6 +231,19 @@ export type ScreenSpec = {
     "variant"?: string;
     "state"?: string;
     "interactionPatternId"?: string;
+    "interactions"?: Array<{
+      "event": "press" | "change" | "submit" | "select" | "toggle";
+      "actions": Array<{
+        "type": "set_state" | "toggle" | "select" | "navigate" | "back" | "open_overlay" | "close_overlay" | "set_input" | "submit_mock" | "scroll_to" | "emit_design_action";
+        "path"?: string;
+        "value"?: string;
+        "screenId"?: string;
+        "stateId"?: string;
+        "overlayId"?: string;
+        "targetId"?: string;
+        "actionId"?: string;
+      }>;
+    }>;
   }>;
   "initialStateId"?: string;
   "states"?: Array<{
@@ -234,8 +259,35 @@ export type ScreenSpec = {
       "variant"?: string;
       "state"?: string;
       "interactionPatternId"?: string;
+      "interactions"?: Array<{
+        "event": "press" | "change" | "submit" | "select" | "toggle";
+        "actions": Array<{
+          "type": "set_state" | "toggle" | "select" | "navigate" | "back" | "open_overlay" | "close_overlay" | "set_input" | "submit_mock" | "scroll_to" | "emit_design_action";
+          "path"?: string;
+          "value"?: string;
+          "screenId"?: string;
+          "stateId"?: string;
+          "overlayId"?: string;
+          "targetId"?: string;
+          "actionId"?: string;
+        }>;
+      }>;
     }>;
   }>;
+  "viewport"?: {
+    "kind"?: "device" | "desktop" | "web";
+    "platform"?: "ios" | "android" | "macos" | "windows" | "web" | "other";
+    "preset"?: string;
+    "width": number;
+    "height": number;
+    "safeTop": number;
+    "safeBottom": number;
+  };
+  "quality"?: {
+    "requiredStateIds"?: Array<string>;
+    "requireTokenReferences"?: boolean;
+    "minimumHitTarget"?: number;
+  };
 };
 
 export type DesignUnitsDocument = {
@@ -248,6 +300,9 @@ export type DesignUnitsDocument = {
       "height": number;
       "safeTop": number;
       "safeBottom": number;
+      "kind"?: "device" | "desktop" | "web";
+      "platform"?: "ios" | "android" | "macos" | "windows" | "web" | "other";
+      "preset"?: string;
     };
     "colorScheme": "light" | "dark";
     "textScale": number;

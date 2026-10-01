@@ -60,6 +60,27 @@
               "safeBottom": {
                 "type": "number",
                 "minimum": 0
+              },
+              "kind": {
+                "enum": [
+                  "device",
+                  "desktop",
+                  "web"
+                ]
+              },
+              "platform": {
+                "enum": [
+                  "ios",
+                  "android",
+                  "macos",
+                  "windows",
+                  "web",
+                  "other"
+                ]
+              },
+              "preset": {
+                "type": "string",
+                "minLength": 1
               }
             }
           },

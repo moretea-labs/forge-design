@@ -12,4 +12,9 @@ export function installTokenVariables(tokens: DesignTokens, root: HTMLElement = 
     root.style.setProperty(`--type-${toKebab(name)}-line`, `${style.lineHeight}px`);
     root.style.setProperty(`--type-${toKebab(name)}-weight`, String(style.weight));
   });
+  Object.entries(tokens.material ?? {}).forEach(([name, material]) => {
+    root.style.setProperty(`--material-${toKebab(name)}-tint`, material.tint ?? 'transparent');
+    root.style.setProperty(`--material-${toKebab(name)}-blur`, `${material.blur ?? 0}px`);
+    root.style.setProperty(`--material-${toKebab(name)}-opacity`, String(material.opacity ?? 1));
+  });
 }

@@ -10,8 +10,7 @@
     "spacing",
     "radius",
     "shadow",
-    "typography",
-    "device"
+    "typography"
   ],
   "properties": {
     "schemaVersion": {
@@ -135,6 +134,49 @@
         "safeBottom": {
           "type": "number",
           "minimum": 0
+        }
+      }
+    },
+    "material": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "solid",
+              "translucent",
+              "glass",
+              "vibrancy"
+            ]
+          },
+          "platform": {
+            "enum": [
+              "ios",
+              "android",
+              "macos",
+              "windows",
+              "web",
+              "other"
+            ]
+          },
+          "tint": {
+            "type": "string",
+            "minLength": 1
+          },
+          "blur": {
+            "type": "number",
+            "minimum": 0
+          },
+          "opacity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
         }
       }
     }

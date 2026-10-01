@@ -2,7 +2,7 @@
   "$schema": "./schemas/forge-plugin.schema.json",
   "id": "design",
   "name": "Forge Design",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "mode": "external",
   "canonicalStorage": ".design-harness",
   "repoHarnessAdapter": null,

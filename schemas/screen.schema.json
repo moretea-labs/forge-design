@@ -8,7 +8,6 @@
     "schemaVersion",
     "id",
     "name",
-    "device",
     "goal",
     "primaryAction",
     "constraints",
@@ -77,6 +76,83 @@
           "interactionPatternId": {
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          },
+          "interactions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "event",
+                "actions"
+              ],
+              "properties": {
+                "event": {
+                  "enum": [
+                    "press",
+                    "change",
+                    "submit",
+                    "select",
+                    "toggle"
+                  ]
+                },
+                "actions": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "type"
+                    ],
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "set_state",
+                          "toggle",
+                          "select",
+                          "navigate",
+                          "back",
+                          "open_overlay",
+                          "close_overlay",
+                          "set_input",
+                          "submit_mock",
+                          "scroll_to",
+                          "emit_design_action"
+                        ]
+                      },
+                      "path": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "screenId": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                      },
+                      "stateId": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                      },
+                      "overlayId": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                      },
+                      "targetId": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                      },
+                      "actionId": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -150,10 +226,157 @@
                 "interactionPatternId": {
                   "type": "string",
                   "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                },
+                "interactions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "event",
+                      "actions"
+                    ],
+                    "properties": {
+                      "event": {
+                        "enum": [
+                          "press",
+                          "change",
+                          "submit",
+                          "select",
+                          "toggle"
+                        ]
+                      },
+                      "actions": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "type"
+                          ],
+                          "properties": {
+                            "type": {
+                              "enum": [
+                                "set_state",
+                                "toggle",
+                                "select",
+                                "navigate",
+                                "back",
+                                "open_overlay",
+                                "close_overlay",
+                                "set_input",
+                                "submit_mock",
+                                "scroll_to",
+                                "emit_design_action"
+                              ]
+                            },
+                            "path": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "value": {
+                              "type": "string"
+                            },
+                            "screenId": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                            },
+                            "stateId": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                            },
+                            "overlayId": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                            },
+                            "targetId": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                            },
+                            "actionId": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
           }
+        }
+      }
+    },
+    "viewport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height",
+        "safeTop",
+        "safeBottom"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "device",
+            "desktop",
+            "web"
+          ]
+        },
+        "platform": {
+          "enum": [
+            "ios",
+            "android",
+            "macos",
+            "windows",
+            "web",
+            "other"
+          ]
+        },
+        "preset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "width": {
+          "type": "number",
+          "minimum": 1
+        },
+        "height": {
+          "type": "number",
+          "minimum": 1
+        },
+        "safeTop": {
+          "type": "number",
+          "minimum": 0
+        },
+        "safeBottom": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requiredStateIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          }
+        },
+        "requireTokenReferences": {
+          "type": "boolean"
+        },
+        "minimumHitTarget": {
+          "type": "number",
+          "minimum": 1
         }
       }
     }

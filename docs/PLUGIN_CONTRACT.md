@@ -31,7 +31,9 @@ The official external provider is `design`. `design_get_context` returns Design 
 
 1. Repository access, authorization, and execution evidence belong to Forge/provider integration.
 2. Structural validation comes from canonical JSON Schemas; cross-asset design semantics and lint belong to the core/store.
-3. Semantic component previews and temporary editor state belong to the web application, but they are not automatically high-fidelity visual authority.
-4. High-fidelity visual authority is the unique current `design_artboard` for one exact Design Unit / Screen / State / Review Profile binding; historical/reference and runtime artifacts remain evidence even when visually similar. Semantic Preview is a derived inspection lane and may never replace a missing Artboard.
-5. Production application source mutation is a separate explicit capability and review step.
-6. Git remains responsible for review, history, branching, merge, and rollback. Multi-file design imports/migrations additionally use the repository-native storage transaction so a provider crash cannot leave mixed-version canonical assets.
+3. Semantic component previews compile through the shared Design IR. Temporary interaction state belongs to the bounded Studio runtime; preview actions are declarative (`set_state`, `toggle`, `select`, `navigate`, overlays, mock submit, scroll, design-action emission) and never execute arbitrary project JavaScript. Semantic Preview is still not automatically high-fidelity visual authority.
+4. Review Profiles own platform-neutral viewport semantics (device/desktop/web plus platform, dimensions, safe areas, color/text/contrast/motion). The legacy Screen `device` field remains compatibility-only; new Screen Specs may carry explicit viewport semantics or inherit a Review Profile.
+5. Baseline structural quality inspection consumes the compiled Design IR and Review Profile so geometry, state coverage, interaction wiring, compile diagnostics, and token references use the same derived tree that is rendered.
+6. High-fidelity visual authority is the unique current `design_artboard` for one exact Design Unit / Screen / State / Review Profile binding; historical/reference and runtime artifacts remain evidence even when visually similar. Semantic Preview is a derived inspection lane and may never replace a missing Artboard.
+7. Production application source mutation is a separate explicit capability and review step.
+8. Git remains responsible for review, history, branching, merge, and rollback. Multi-file design imports/migrations additionally use the repository-native storage transaction so a provider crash cannot leave mixed-version canonical assets.

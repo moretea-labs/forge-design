@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { ComponentContractsDocument, ScreenSpec, VisualAsset } from '../core/schema';
+import type { ComponentContractsDocument, DesignTokens, ScreenSpec, VisualAsset } from '../core/schema';
 import { calculateReviewFitScale, ReviewCanvas } from './ReviewCanvas';
 
 const spec: ScreenSpec = {
@@ -16,6 +16,7 @@ const spec: ScreenSpec = {
 };
 
 const components: ComponentContractsDocument = { schemaVersion: 1, components: [] };
+const tokens: DesignTokens = { schemaVersion: 1, meta: { name: 'Test', version: '1' }, color: { textPrimary: 'test-text', screenBackground: 'test-background' }, spacing: { sm: 8, lg: 16, xl: 24 }, radius: { card: 12, device: 20 }, shadow: {}, typography: { body: { size: 14, lineHeight: 20, weight: 400 } } };
 
 const artboard: VisualAsset = {
   id: 'artboard_primary_home_normal_standard-light',
@@ -50,6 +51,7 @@ describe('ReviewCanvas authority lanes', () => {
   const baseProps = {
     spec,
     components,
+    tokens,
     profile: null,
     surfaceStyle: {},
     zoom: 0.78,

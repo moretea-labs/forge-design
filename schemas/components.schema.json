@@ -271,7 +271,22 @@
                         "button",
                         "value",
                         "badge",
-                        "progress"
+                        "progress",
+                        "grid",
+                        "scroll",
+                        "layer",
+                        "shape",
+                        "image",
+                        "path",
+                        "input",
+                        "toggle",
+                        "segmented",
+                        "menu",
+                        "selection",
+                        "list",
+                        "table",
+                        "outline",
+                        "collection"
                       ]
                     },
                     "parentId": {
@@ -360,6 +375,31 @@
                             "fill",
                             "hug"
                           ]
+                        },
+                        "height": {
+                          "enum": [
+                            "fill",
+                            "hug"
+                          ]
+                        },
+                        "overflow": {
+                          "enum": [
+                            "visible",
+                            "hidden",
+                            "auto"
+                          ]
+                        },
+                        "columns": {
+                          "type": "number",
+                          "minimum": 1
+                        },
+                        "shadow": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "material": {
+                          "type": "string",
+                          "minLength": 1
                         }
                       }
                     },

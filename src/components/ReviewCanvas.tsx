@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { analyzeDeclaredLayout, parseDeclaredLayoutRegions, renderedOverflowIssues, type LayoutIssue, type LayoutRegion } from '../core/artboard-layout';
-import type { ComponentContractsDocument, DesignReviewProfile, ScreenSpec, VisualAsset } from '../core/schema';
+import { compileScreenToDesignIR } from '../core/design-ir';
+import { inspectDesignIR } from '../core/quality';
+import type { ComponentContractsDocument, DesignReviewProfile, DesignTokens, ScreenSpec, VisualAsset } from '../core/schema';
 import { MockScreen } from './MockScreen';
 
 export type ReviewCanvasMode = 'device' | 'full-page' | 'fit';
@@ -9,6 +11,7 @@ export type ReviewCanvasLane = 'artboard' | 'semantic';
 type Props = {
   spec: ScreenSpec;
   components: ComponentContractsDocument;
+  tokens: DesignTokens;
   profile: DesignReviewProfile | null;
   surfaceStyle: CSSProperties;
   zoom: number;
@@ -40,6 +43,7 @@ export function calculateReviewFitScale(
 export function ReviewCanvas({
   spec,
   components,
+  tokens,
   profile,
   surfaceStyle,
   zoom,
@@ -57,12 +61,16 @@ export function ReviewCanvas({
   const [layoutRegions, setLayoutRegions] = useState<LayoutRegion[]>([]);
   const [layoutIssues, setLayoutIssues] = useState<LayoutIssue[]>([]);
   const [layoutStatus, setLayoutStatus] = useState<'pass' | 'fail' | 'unannotated' | 'loading'>('loading');
-  const screenWidth = profile?.viewport.width ?? 393;
-  const screenHeight = profile?.viewport.height ?? 852;
+  const semanticIr = compileScreenToDesignIR(spec, components, profile);
+  const semanticIssues = inspectDesignIR(semanticIr, spec, tokens);
+  const screenWidth = semanticIr.viewport.width;
+  const screenHeight = semanticIr.viewport.height;
+  const isPhoneLike = semanticIr.viewport.kind === 'device' && semanticIr.viewport.platform === 'ios';
   const artboardWidth = artboard?.dimensions?.width ?? screenWidth;
   const artboardHeight = artboard?.dimensions?.height ?? screenHeight;
   const frameWidth = screenWidth + framePadding;
   const frameHeight = screenHeight + framePadding;
+  const runtimeSurfaceStyle = { ...surfaceStyle, width: frameWidth, height: frameHeight, '--review-screen-width': `${screenWidth}px`, '--review-screen-height': `${screenHeight}px`, '--review-safe-top': `${semanticIr.viewport.safeTop}px`, '--review-safe-bottom': `${semanticIr.viewport.safeBottom}px` } as CSSProperties;
   const comparing = Boolean(reference && referenceUrl);
 
   useEffect(() => {
@@ -95,7 +103,7 @@ export function ReviewCanvas({
       const regions = parseDeclaredLayoutRegions(svg);
       const declared = analyzeDeclaredLayout(
         regions,
-        { width: screenWidth, height: screenHeight, safeTop: profile?.viewport.safeTop, safeBottom: profile?.viewport.safeBottom },
+        { width: screenWidth, height: screenHeight, safeTop: semanticIr.viewport.safeTop, safeBottom: semanticIr.viewport.safeBottom },
         { width: artboardWidth, height: artboardHeight },
       );
       setLayoutRegions(regions);
@@ -138,30 +146,33 @@ export function ReviewCanvas({
       controller.abort();
       if (analysisNode?.parentNode) analysisNode.parentNode.removeChild(analysisNode);
     };
-  }, [artboardHeight, artboardUrl, artboardWidth, lane, profile?.viewport.safeBottom, profile?.viewport.safeTop, screenHeight, screenWidth]);
+  }, [artboardHeight, artboardUrl, artboardWidth, lane, screenHeight, screenWidth, semanticIr.viewport.safeBottom, semanticIr.viewport.safeTop]);
 
   const scale = mode === 'fit' ? fitScale : zoom;
+  const viewportLabel = semanticIr.viewport.kind === 'desktop' ? 'Desktop viewport' : semanticIr.viewport.kind === 'web' ? 'Web viewport' : 'Device viewport';
   const modeLabel = mode === 'device'
-    ? 'Device viewport · 内部滚动'
+    ? `${viewportLabel} · 内部滚动`
     : mode === 'full-page'
       ? 'Full page · 完整内容'
       : 'Fit · 自动适配';
 
   const semanticSurface = mode === 'full-page' ? (
-    <div className="review-full-page-frame" style={{ ...surfaceStyle, width: frameWidth, height: 'auto', zoom: scale }}>
-      <MockScreen spec={spec} components={components} fullPage />
+    <div className="review-full-page-frame" style={{ ...runtimeSurfaceStyle, height: 'auto', zoom: scale }}>
+      <MockScreen spec={spec} components={components} profile={profile} fullPage />
     </div>
   ) : (
     <div className="review-scaled-frame" style={{ width: frameWidth * scale, height: frameHeight * scale }}>
       <div
-        className="device-frame review-device-frame"
+        className="viewport-frame device-frame review-device-frame"
         data-color-scheme={profile?.colorScheme}
         data-contrast={profile?.contrast}
         data-reduce-motion={profile?.reduceMotion ? 'true' : 'false'}
-        style={{ ...surfaceStyle, transform: `scale(${scale})` }}
+        data-viewport-kind={semanticIr.viewport.kind}
+        data-platform={semanticIr.viewport.platform}
+        style={{ ...runtimeSurfaceStyle, transform: `scale(${scale})` }}
       >
-        <div className="dynamic-island" />
-        <MockScreen spec={spec} components={components} />
+        {isPhoneLike ? <div className="dynamic-island" /> : null}
+        <MockScreen spec={spec} components={components} profile={profile} />
       </div>
     </div>
   );
@@ -191,13 +202,15 @@ export function ReviewCanvas({
   ) : (
     <div className="review-scaled-frame" style={{ width: frameWidth * scale, height: frameHeight * scale }}>
       <div
-        className="device-frame review-device-frame"
+        className="viewport-frame device-frame review-device-frame"
         data-color-scheme={profile?.colorScheme}
         data-contrast={profile?.contrast}
         data-reduce-motion={profile?.reduceMotion ? 'true' : 'false'}
-        style={{ ...surfaceStyle, transform: `scale(${scale})` }}
+        data-viewport-kind={semanticIr.viewport.kind}
+        data-platform={semanticIr.viewport.platform}
+        style={{ ...runtimeSurfaceStyle, transform: `scale(${scale})` }}
       >
-        <div className="dynamic-island" />
+        {isPhoneLike ? <div className="dynamic-island" /> : null}
         <div className="artboard-viewport" style={{ width: screenWidth, height: screenHeight }}>
           {artboardContent}
           {layoutHighlights()}
@@ -214,7 +227,7 @@ export function ReviewCanvas({
       </div>
     ) : (
       <div className="review-scaled-frame" style={{ width: frameWidth * scale, height: frameHeight * scale }}>
-        <div className="reference-device-frame" style={{ width: frameWidth, height: frameHeight, transform: `scale(${scale})` }}>
+        <div className="reference-device-frame" data-viewport-kind={semanticIr.viewport.kind} data-platform={semanticIr.viewport.platform} style={{ width: frameWidth, height: frameHeight, transform: `scale(${scale})` }}>
           <div className="reference-viewport" style={{ width: screenWidth, height: screenHeight }}>
             <img src={referenceUrl} alt={reference.name} />
           </div>
@@ -231,6 +244,7 @@ export function ReviewCanvas({
       <div className="review-columns">
         <section className="review-column">
           <div className="review-column-label"><strong>{spec.name} · {laneLabel}</strong><span>{authorityLabel} · {modeLabel} · {Math.round(scale * 100)}%</span></div>
+          {lane === 'semantic' ? <div className={'artboard-layout-quality ' + (semanticIssues.some((issue) => issue.severity === 'error') ? 'fail' : 'pass')}><strong>{semanticIssues.length === 0 ? 'Design IR quality · Pass' : `Design IR quality · ${semanticIssues.length} issue${semanticIssues.length === 1 ? '' : 's'}`}</strong>{semanticIssues.length ? <ul>{semanticIssues.slice(0, 6).map((issue, index) => <li key={issue.rule + '-' + index}>{issue.message}</li>)}</ul> : null}</div> : null}
           {lane === 'artboard' ? <div className={'artboard-layout-quality ' + layoutStatus}>
             <strong>{layoutStatus === 'pass' ? 'Layout quality · Pass' : layoutStatus === 'unannotated' ? 'Layout quality · Review missing' : layoutStatus === 'loading' ? 'Layout quality · Checking…' : 'Layout quality · ' + layoutIssues.length + ' issue' + (layoutIssues.length === 1 ? '' : 's')}</strong>
             {layoutStatus === 'fail' ? <ul>{layoutIssues.slice(0, 5).map((issue, index) => <li key={issue.code + '-' + index}>{issue.message}</li>)}</ul> : null}

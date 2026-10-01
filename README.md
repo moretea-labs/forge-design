@@ -97,7 +97,7 @@ Target repository (.design-harness)
         interactive renderer
 ```
 
-The official Forge plugin identity is `design`; the provider uses a bounded managed-process JSONL protocol. The `.design-harness/` directory remains the current repository asset format for compatibility and is not renamed mechanically.
+The official Forge plugin identity is `design`; the provider uses a bounded managed-process JSONL protocol. The `.design-harness/` directory remains the current repository asset format for compatibility and is not renamed mechanically. Screen/component assets compile into one platform-neutral Design IR before semantic rendering. The Studio runtime executes only bounded declarative preview actions; project JavaScript is never loaded as preview authority. Review Profiles provide viewport/platform semantics for iOS, Android, macOS, Windows, web, or other surfaces, while legacy `iphone-16-pro` Screen Specs remain readable.
 
 ## Verify
 
@@ -112,6 +112,6 @@ See [Product Design Workflow](docs/PRODUCT_DESIGN_WORKFLOW.md), [Storage](docs/S
 
 ## Project
 
-Latest published release: `v0.3.0`; current main is the `v0.5.0` candidate with Design Units, state/transition flows, typed declarative previews, granular ChatGPT actions, human acceptance/freeze authority, Review Profiles, and crash-safe bundle publication. Use Issues for reproducible design/provider bugs and feature requests. Cross-product Forge questions belong in [Forge Discussions](https://github.com/moretea-labs/forge/discussions). Security reports should use GitHub Private Vulnerability Reporting; see [SECURITY.md](SECURITY.md).
+Latest published release: `v0.3.0`; current main is the `v0.6.0` candidate with Design Units, state/transition flows, a unified Design IR/Studio runtime, bounded declarative preview interactions, platform-neutral Review Profiles, baseline IR quality inspection, granular ChatGPT actions, human acceptance/freeze authority, and crash-safe bundle publication. Use Issues for reproducible design/provider bugs and feature requests. Cross-product Forge questions belong in [Forge Discussions](https://github.com/moretea-labs/forge/discussions). Security reports should use GitHub Private Vulnerability Reporting; see [SECURITY.md](SECURITY.md).
 
 Licensed under the [MIT License](LICENSE).
