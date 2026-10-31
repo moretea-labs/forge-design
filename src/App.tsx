@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactElement } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import {
   Check,
   CheckCircle2,
@@ -140,6 +140,8 @@ export default function App(): ReactElement {
   const [moduleScreenId, setModuleScreenId] = useState('');
   const [moduleScreenQuery, setModuleScreenQuery] = useState('');
   const [modulePreviewScale, setModulePreviewScale] = useState(0.72);
+  const [modulePreviewUrl, setModulePreviewUrl] = useState('');
+  const modulePreviewFrame = useRef<HTMLIFrameElement>(null);
   const [projectId, setProjectId] = useState('');
   const [context, setContext] = useState<DesignProjectContext | null>(null);
   const [paths, setPaths] = useState<DesignProjectPaths | null>(null);
@@ -213,6 +215,30 @@ export default function App(): ReactElement {
     return context.product.flows.filter((flow) => flow.screenIds.includes(selected.id) || flow.entry?.screenId === selected.id || (flow.transitions ?? []).some((transition) => transition.from.screenId === selected.id || transition.to.screenId === selected.id || (transition.recovery ?? []).some((item) => item.target.screenId === selected.id)));
   }, [context, selected]);
 
+  const openModuleScreen = (module: DesignSourceModule, screenId = module.preview?.screenId ?? '') => {
+    setSelectedModuleId(module.id);
+    setModuleScreenId(screenId);
+    setModuleScreenQuery('');
+    setModulePreviewUrl(module.preview ? designApi.modulePreviewUrl(projectId, module, screenId) : '');
+  };
+
+  useEffect(() => {
+    const followPrototypeRoute = (event: MessageEvent) => {
+      if (event.source !== modulePreviewFrame.current?.contentWindow) return;
+      const data: unknown = event.data;
+      if (!data || typeof data !== 'object' || !('type' in data) || data.type !== 'forge-design-prototype:navigate'
+        || !('screenId' in data) || typeof data.screenId !== 'string') return;
+      const currentModule = sourceModules.find(module => module.screens?.some(screen => screen.id === data.screenId));
+      if (!currentModule) return;
+      // Only the review selection follows this event. Retain the iframe URL so the in-memory draft survives route transitions.
+      setSelectedModuleId(currentModule.id);
+      setModuleScreenId(data.screenId);
+      setModuleScreenQuery('');
+    };
+    window.addEventListener('message', followPrototypeRoute);
+    return () => window.removeEventListener('message', followPrototypeRoute);
+  }, [sourceModules]);
+
   const loadProject = useCallback(async (nextProjectId: string, preferredScreenId?: string, openModules = false) => {
     setBusy(true);
     setNotice(null);
@@ -227,7 +253,9 @@ export default function App(): ReactElement {
       if (openModules && nextModules.length) setView('modules');
       setModuleScreenId('');
       setModuleScreenQuery('');
-      setSelectedModuleId((current) => nextModules.some((module) => module.id === current) ? current : nextModules[0]?.id ?? '');
+      const firstModule = nextModules[0];
+      setSelectedModuleId(firstModule?.id ?? '');
+      setModulePreviewUrl(firstModule?.preview ? designApi.modulePreviewUrl(nextProjectId, firstModule) : '');
       setContext(nextContext);
       setPaths(nextPaths);
       setReviewStatus(nextReviewStatus);
@@ -525,12 +553,12 @@ export default function App(): ReactElement {
         {view === 'product' ? renderProductSidebar() : view === 'screens' ? renderScreensSidebar() : view === 'components' ? renderComponentsSidebar() : view === 'modules' ? (
           <div className="module-navigator">
             <div className="sidebar-section-title"><span>产品模块</span><span>{sourceModules.length}</span></div>
-            <div className="module-family-list">{sourceModules.map(module => <button type="button" key={module.id} aria-current={module.id === selectedModule?.id ? 'page' : undefined} className={module.id === selectedModule?.id ? 'selected' : ''} onClick={() => { setSelectedModuleId(module.id); setModuleScreenId(''); setModuleScreenQuery(''); }}><span>{module.name}</span><small>{module.screens?.length ?? 0}</small></button>)}</div>
+            <div className="module-family-list">{sourceModules.map(module => <button type="button" key={module.id} aria-current={module.id === selectedModule?.id ? 'page' : undefined} className={module.id === selectedModule?.id ? 'selected' : ''} onClick={() => openModuleScreen(module)}><span>{module.name}</span><small>{module.screens?.length ?? 0}</small></button>)}</div>
             {selectedModule && <div className="module-page-browser">
               <div className="sidebar-section-title"><span>页面与状态</span><span>{selectedModule.screens?.length ?? 0}</span></div>
               <label className="module-search"><Search size={14}/><input aria-label="搜索设计页面" value={moduleScreenQuery} placeholder="搜索页面或状态…" onChange={event => setModuleScreenQuery(event.target.value)} /></label>
               <div className="module-screen-list" role="list" aria-label="模块页面列表">
-                {visibleModuleScreens.map(screen => <button type="button" role="listitem" key={screen.id} aria-current={screen.id === selectedModuleScreen?.id ? 'page' : undefined} className={screen.id === selectedModuleScreen?.id ? 'selected' : ''} onClick={() => setModuleScreenId(screen.id)}><strong>{screen.name}</strong><small>{screen.id}</small></button>)}
+                {visibleModuleScreens.map(screen => <button type="button" role="listitem" key={screen.id} aria-current={screen.id === selectedModuleScreen?.id ? 'page' : undefined} className={screen.id === selectedModuleScreen?.id ? 'selected' : ''} onClick={() => openModuleScreen(selectedModule, screen.id)}><strong>{screen.name}</strong><small>{screen.id}</small></button>)}
                 {!visibleModuleScreens.length && <p>没有匹配的页面</p>}
               </div>
             </div>}
@@ -578,13 +606,13 @@ export default function App(): ReactElement {
                 <button type="button" aria-pressed={modulePreviewScale === 0.72} aria-label="缩放至72%" onClick={() => setModulePreviewScale(0.72)}>72%</button>
                 <button type="button" aria-pressed={modulePreviewScale === 1} onClick={() => setModulePreviewScale(1)}>100%</button>
                 <span>{selectedModuleScreen && selectedModule.screens ? selectedModule.screens.findIndex(screen => screen.id === selectedModuleScreen.id) + 1 : 0} / {selectedModule.screens?.length ?? 0}</span>
-                <button type="button" aria-label="上一页设计" disabled={!selectedModuleScreen || !selectedModule.screens || selectedModule.screens[0]?.id === selectedModuleScreen.id} onClick={() => { const pages = selectedModule.screens ?? []; const i = pages.findIndex(screen => screen.id === selectedModuleScreen?.id); if (i > 0) setModuleScreenId(pages[i - 1].id); }}>‹</button>
-                <button type="button" aria-label="下一页设计" disabled={!selectedModuleScreen || !selectedModule.screens || selectedModule.screens.at(-1)?.id === selectedModuleScreen.id} onClick={() => { const pages = selectedModule.screens ?? []; const i = pages.findIndex(screen => screen.id === selectedModuleScreen?.id); if (i >= 0 && i < pages.length - 1) setModuleScreenId(pages[i + 1].id); }}>›</button>
+                <button type="button" aria-label="上一页设计" disabled={!selectedModuleScreen || !selectedModule.screens || selectedModule.screens[0]?.id === selectedModuleScreen.id} onClick={() => { const pages = selectedModule.screens ?? []; const i = pages.findIndex(screen => screen.id === selectedModuleScreen?.id); if (i > 0) openModuleScreen(selectedModule, pages[i - 1].id); }}>‹</button>
+                <button type="button" aria-label="下一页设计" disabled={!selectedModuleScreen || !selectedModule.screens || selectedModule.screens.at(-1)?.id === selectedModuleScreen.id} onClick={() => { const pages = selectedModule.screens ?? []; const i = pages.findIndex(screen => screen.id === selectedModuleScreen?.id); if (i >= 0 && i < pages.length - 1) openModuleScreen(selectedModule, pages[i + 1].id); }}>›</button>
               </div>
             </div>
             <div className="module-preview-stage">
               {selectedModule.preview && selectedModuleScreen ? (
-                <div className="module-preview-scale-slot" style={{ width: 411 * modulePreviewScale, height: 870 * modulePreviewScale }}><div className="module-preview-device" style={{ transform: `scale(${modulePreviewScale})`, transformOrigin: 'top left' }}><iframe key={selectedModuleScreen.id} title={selectedModuleScreen.name + ' · isolated prototype preview'} sandbox="allow-scripts" loading="lazy" referrerPolicy="no-referrer" src={designApi.modulePreviewUrl(projectId, selectedModule, selectedModuleScreen.id)} /></div></div>
+                <div className="module-preview-scale-slot" style={{ width: 411 * modulePreviewScale, height: 870 * modulePreviewScale }}><div className="module-preview-device" style={{ transform: `scale(${modulePreviewScale})`, transformOrigin: 'top left' }}><iframe ref={modulePreviewFrame} key={modulePreviewUrl} title={selectedModuleScreen.name + ' · isolated prototype preview'} sandbox="allow-scripts" loading="lazy" referrerPolicy="no-referrer" src={modulePreviewUrl} /></div></div>
               ) : <p>此模块尚未绑定可预览页面，源码导出仍可使用。</p>}
             </div>
             <p className="module-preview-caption">预览来自项目仓库原型构建；此处不产生第二套设计 Authority。正式 Golden 与 SwiftUI 实现另行验收。</p>
