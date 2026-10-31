@@ -86,3 +86,26 @@ describe('single-source Studio page registration', () => {
     expect((await listDesignModules(project, { includeScreens: false }))[0].screens).toBeUndefined();
   });
 });
+
+describe('derived historical gallery', () => {
+  it('exposes all unassigned registered screens once, without granting an export authority', async () => {
+    const project = await fixture();
+    await mkdir(join(project.root, 'design/src'), { recursive: true });
+    await writeFile(join(project.root, 'design/src/main.tsx'), [
+      'const SCREENS = [',
+      " { id: 'current-home', collection: 'current', kind: 'candidate', name: 'Current' },",
+      " { id: 'reference-home', collection: 'reference', kind: 'historical', name: 'Reference' },",
+      " { id: 'reference-error', collection: 'reference', kind: 'historical', name: 'Reference Error' },",
+      '] as const;',
+    ].join('\n'));
+    await writeFile(join(project.root, 'screen.tsx'), 'export const Screen = true;');
+    await catalog(project, [{ id: 'current', name: 'Current', files: ['screen.tsx'], preview: { entry: 'design/dist/prototype.html', screenId: 'current-home' } }]);
+    const modules = await listDesignModules(project);
+    expect(modules).toHaveLength(2);
+    expect(modules[1].id).toBe('historical-candidates');
+    expect(modules[1].readOnly).toBe(true);
+    expect(modules[1].previewModuleId).toBe('current');
+    expect(modules.flatMap(module => module.screens.map(screen => screen.id))).toEqual(['current-home', 'reference-home', 'reference-error']);
+    await expect(exportDesignModule(project, 'historical-candidates')).rejects.toThrow(/Design module not found/);
+  });
+});

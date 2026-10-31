@@ -2,7 +2,7 @@ import type { ComponentContractsDocument, DesignProjectContext, DesignProjectPat
 
 type ApiErrorPayload = { error?: { code?: string; message?: string } };
 export type DesignModuleScreen = { id: string; name: string; badge: string; kind: string };
-export type DesignSourceModule = { id: string; name: string; description: string; files: string[]; screens?: DesignModuleScreen[]; preview?: { entry: string; screenId: string } };
+export type DesignSourceModule = { id: string; name: string; description: string; files: string[]; screens?: DesignModuleScreen[]; preview?: { entry: string; screenId: string }; previewModuleId?: string; readOnly?: boolean };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -34,7 +34,7 @@ export const designApi = {
     }
     return response.blob();
   },
-  modulePreviewUrl: (projectId: string, module: DesignSourceModule, screenId = module.preview?.screenId ?? '') => projectPath(projectId, '/modules/' + encodeURIComponent(module.id) + '/preview/' + encodeURIComponent(module.preview?.entry.split('/').at(-1) ?? 'prototype.html')) + '?screen=' + encodeURIComponent(screenId),
+  modulePreviewUrl: (projectId: string, module: DesignSourceModule, screenId = module.preview?.screenId ?? '') => projectPath(projectId, '/modules/' + encodeURIComponent(module.previewModuleId ?? module.id) + '/preview/' + encodeURIComponent(module.preview?.entry.split('/').at(-1) ?? 'prototype.html')) + '?screen=' + encodeURIComponent(screenId),
   getPaths: (projectId: string) => request<DesignProjectPaths>(projectPath(projectId, '/paths')),
   getReviewStatus: (projectId: string) => request<DesignReviewStatus>(projectPath(projectId, '/review-status')),
   validate: (projectId: string) => request<{ ok: boolean; projectId: string; errors: string[]; warnings: string[]; goldenGate: DesignProjectContext['goldenGate'] }>(projectPath(projectId, '/validate')),

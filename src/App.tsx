@@ -140,6 +140,8 @@ export default function App(): ReactElement {
   const [moduleScreenId, setModuleScreenId] = useState('');
   const [moduleScreenQuery, setModuleScreenQuery] = useState('');
   const [modulePreviewScale, setModulePreviewScale] = useState(0.72);
+  const [modulePreviewWidth, setModulePreviewWidth] = useState(393);
+  const modulePreviewHeight = modulePreviewWidth === 320 ? 700 : 852;
   const [modulePreviewUrl, setModulePreviewUrl] = useState('');
   const modulePreviewFrame = useRef<HTMLIFrameElement>(null);
   const [projectId, setProjectId] = useState('');
@@ -572,7 +574,7 @@ export default function App(): ReactElement {
           <div className="toolbar-title"><span className="crumb">{context.project.name} /</span><strong>{view === 'product' ? 'Product Contract' : view === 'screens' ? selected?.name : view === 'components' ? 'Components' : view === 'modules' ? selectedModule?.name : 'Tokens'}</strong>{view === 'modules' && selectedModule && <small className="toolbar-module-count">{selectedModule.screens?.length ?? 0} 页面 / 状态</small>}</div>
           <div className="toolbar-controls">
             <button onClick={() => void copyContext()}><Clipboard size={15} />ChatGPT Context</button>
-            {view === 'modules' && selectedModule && <button onClick={() => void downloadModule()} disabled={busy}><Download size={15} />导出当前模块源码</button>}
+            {view === 'modules' && selectedModule && !selectedModule.readOnly && <button onClick={() => void downloadModule()} disabled={busy}><Download size={15} />导出当前模块源码</button>}
             <button onClick={() => void loadProjects()} disabled={busy}><RefreshCw className={busy ? 'spin' : ''} size={15} />刷新</button>
             {view === 'screens' && reviewProfile && <label className="device-select"><Smartphone size={15} /><select aria-label="Review Profile" value={reviewProfile.id} onChange={(event) => setReviewProfileId(event.target.value)}>{reviewProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select><ChevronDown size={13} /></label>}
             {view === 'screens' && selected && selectedStateIds.length > 1 && <label className="device-select"><Layers3 size={15} /><select aria-label="页面状态" value={activeStateId} onChange={(event) => setActiveStateId(event.target.value)}>{selected.states?.map((state) => <option key={state.id} value={state.id}>{state.name}</option>)}</select><ChevronDown size={13} /></label>}
@@ -598,11 +600,12 @@ export default function App(): ReactElement {
           <div className="module-preview-workspace">
             <header className="module-preview-header">
               <div><span className="module-preview-eyebrow">UI CANDIDATE / SCREEN REVIEW</span><h1>{selectedModuleScreen?.name ?? selectedModule.name}</h1><p>{selectedModule.description}</p></div>
-              <span className="module-review-tag">候选 · 未审定</span>
+              <span className="module-review-tag">{selectedModule.readOnly ? '历史参考 · 只读' : '候选 · 未审定'}</span>
             </header>
             <div className="module-preview-toolbar">
               <div className="module-preview-breadcrumb"><span>{selectedModule.name}</span><span aria-hidden="true">/</span><strong>{selectedModuleScreen?.id ?? 'No screen'}</strong></div>
               <div className="module-preview-pagination">
+                <label className="module-viewport-control"><select aria-label="预览设备尺寸" value={modulePreviewWidth} onChange={event => setModulePreviewWidth(Number(event.target.value))}><option value={393}>393 × 852</option><option value={320}>320 × 700</option></select></label>
                 <button type="button" aria-pressed={modulePreviewScale === 0.72} aria-label="缩放至72%" onClick={() => setModulePreviewScale(0.72)}>72%</button>
                 <button type="button" aria-pressed={modulePreviewScale === 1} onClick={() => setModulePreviewScale(1)}>100%</button>
                 <span>{selectedModuleScreen && selectedModule.screens ? selectedModule.screens.findIndex(screen => screen.id === selectedModuleScreen.id) + 1 : 0} / {selectedModule.screens?.length ?? 0}</span>
@@ -612,7 +615,7 @@ export default function App(): ReactElement {
             </div>
             <div className="module-preview-stage">
               {selectedModule.preview && selectedModuleScreen ? (
-                <div className="module-preview-scale-slot" style={{ width: 411 * modulePreviewScale, height: 870 * modulePreviewScale }}><div className="module-preview-device" style={{ transform: `scale(${modulePreviewScale})`, transformOrigin: 'top left' }}><iframe ref={modulePreviewFrame} key={modulePreviewUrl} title={selectedModuleScreen.name + ' · isolated prototype preview'} sandbox="allow-scripts" loading="lazy" referrerPolicy="no-referrer" src={modulePreviewUrl} /></div></div>
+                <div className="module-preview-scale-slot" style={{ width: (modulePreviewWidth + 18) * modulePreviewScale, height: (modulePreviewHeight + 18) * modulePreviewScale }}><div className="module-preview-device" style={{ width: modulePreviewWidth + 18, height: modulePreviewHeight + 18, transform: `scale(${modulePreviewScale})`, transformOrigin: 'top left' }}><iframe ref={modulePreviewFrame} key={modulePreviewUrl} title={selectedModuleScreen.name + ' · isolated prototype preview'} sandbox="allow-scripts" loading="lazy" referrerPolicy="no-referrer" src={modulePreviewUrl} style={{ width: modulePreviewWidth, height: modulePreviewHeight }} /></div></div>
               ) : <p>此模块尚未绑定可预览页面，源码导出仍可使用。</p>}
             </div>
             <p className="module-preview-caption">预览来自项目仓库原型构建；此处不产生第二套设计 Authority。正式 Golden 与 SwiftUI 实现另行验收。</p>
@@ -651,8 +654,8 @@ export default function App(): ReactElement {
           <>
             <div className="inspector-tabs single-tab"><button className="active">审查与交接</button></div>
             <section className="inspector-section"><div className="inspector-title"><Focus size={16} /><strong>当前页面</strong></div><p><strong>{selectedModuleScreen?.name ?? '未绑定页面'}</strong></p><code>{selectedModuleScreen?.id ?? '—'}</code><p className="module-review-guidance">评审：信息层级、主操作、正常/空/异常态、动态字体、触控面积及跨页面语义一致性。当前画面不是正式视觉验收。</p></section>
-            <section className="inspector-section"><div className="inspector-title"><FileCode2 size={16} /><strong>模块源码</strong></div><p>只导出本模块显式登记的文件，无需复制整个 App 或运行旧 Studio。</p><details className="module-source-files"><summary>查看 {selectedModule.files.length} 个源码与合同文件</summary><ul>{selectedModule.files.map((file) => <li key={file}><code>{file}</code></li>)}</ul></details></section>
-            <section className="inspector-section"><button className="inspector-action" onClick={() => void downloadModule()} disabled={busy}><Download size={14} />导出 Markdown 交给 Gemini</button></section>
+            <section className="inspector-section"><div className="inspector-title"><FileCode2 size={16} /><strong>{selectedModule.readOnly ? '历史参考来源' : '模块源码'}</strong></div><p>{selectedModule.readOnly ? "页面来自原项目注册表，仅供历史参考；此处不建立第二套设计合同。" : "只导出本模块显式登记的文件，无需复制整个 App 或运行旧 Studio。"}</p>{!selectedModule.readOnly && <details className="module-source-files"><summary>查看 {selectedModule.files.length} 个源码与合同文件</summary><ul>{selectedModule.files.map((file) => <li key={file}><code>{file}</code></li>)}</ul></details>}</section>
+            {!selectedModule.readOnly && <section className="inspector-section"><button className="inspector-action" onClick={() => void downloadModule()} disabled={busy}><Download size={14} />导出 Markdown 交给 Gemini</button></section>}
           </>
         ) : view === 'screens' ? (
           <>

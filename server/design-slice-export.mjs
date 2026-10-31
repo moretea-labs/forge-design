@@ -93,11 +93,22 @@ export async function listDesignModules(project, { includeScreens = true } = {})
       if (error.code !== 'ENOENT') throw error;
     }
   }
-  return modules.map(module => {
+  const grouped = modules.map(module => {
     const sourceScreen = registry.find(screen => screen.id === module.preview?.screenId);
     const screens = sourceScreen ? registry.filter(screen => screen.collection === sourceScreen.collection) : [];
     return { ...module, screens: screens.length ? screens : module.preview ? [{ id: module.preview.screenId, name: module.name, badge: 'Preview', kind: 'candidate' }] : [] };
   });
+  // Read-only remainder from the same source registry, never a second list of page IDs.
+  const coveredIds = new Set(grouped.flatMap(module => module.screens.map(screen => screen.id)));
+  const unassigned = registry.filter(screen => !coveredIds.has(screen.id));
+  const previewHost = modules.find(module => module.preview);
+  if (unassigned.length && previewHost) {
+    grouped.push({
+      id: 'historical-candidates', name: '其他参考与历史候选', description: '源自项目页面注册表的历史参考和视觉实验，只用于对照；不是当前 V2 已验收页面。',
+      files: [], preview: previewHost.preview, previewModuleId: previewHost.id, readOnly: true, screens: unassigned,
+    });
+  }
+  return grouped;
 }
 
 async function readBoundedProjectFile(project, path) {
