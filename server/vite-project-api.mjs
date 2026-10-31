@@ -1,4 +1,5 @@
 import { DesignStoreError, createProjectStore } from './project-store.mjs';
+import { listDesignModules, exportDesignModule, readDesignModulePreview, ModuleExportError } from './design-slice-export.mjs';
 
 const maxBodyBytes = 1024 * 1024;
 const maxMarkdownBodyBytes = 8 * 1024 * 1024;
@@ -85,6 +86,25 @@ export function designHarnessApiPlugin(options = {}) {
             if (method === 'GET') return sendText(response, 200, await store.exportDesignMarkdown(projectId), 'text/markdown; charset=utf-8');
             if (method === 'PUT') return sendJson(response, 200, await store.importDesignMarkdown(projectId, await readTextBody(request)));
           }
+          if (resource === 'modules' && method === 'GET') {
+            const project = await store.resolveProject(projectId);
+            if (segments.length === 5) return sendJson(response, 200, { modules: await listDesignModules(project) });
+            const moduleId = segments[5];
+            if (segments[6] === 'export.md' && segments.length === 7) {
+              response.setHeader('Content-Disposition', 'attachment; filename="' + moduleId + '-design.md"');
+              return sendText(response, 200, await exportDesignModule(project, moduleId), 'text/markdown; charset=utf-8');
+            }
+            if (segments[6] === 'preview' && segments.length >= 8) {
+              const asset = await readDesignModulePreview(project, moduleId, segments.slice(7).join('/'));
+              response.statusCode = 200;
+              response.setHeader('Content-Type', asset.mediaType);
+              response.setHeader('Content-Length', String(asset.bytes.length));
+              response.setHeader('Cache-Control', 'no-store');
+              response.setHeader('X-Content-Type-Options', 'nosniff');
+              response.setHeader('Access-Control-Allow-Origin', '*');
+              return response.end(asset.bytes);
+            }
+          }
           if (resource === 'validate' && method === 'GET') return sendJson(response, 200, await store.validateProject(projectId));
           if (resource === 'review-status' && method === 'GET') return sendJson(response, 200, await store.getDesignReviewStatus(projectId));
           if (resource === 'paths' && method === 'GET') return sendJson(response, 200, await store.getPaths(projectId));
@@ -121,7 +141,7 @@ export function designHarnessApiPlugin(options = {}) {
           }
           throw new DesignStoreError('Unknown Design Harness API route.', 404, 'ROUTE_NOT_FOUND');
         } catch (error) {
-          if (error instanceof DesignStoreError) return sendJson(response, error.status, { error: { code: error.code, message: error.message } });
+          if (error instanceof DesignStoreError || error instanceof ModuleExportError) return sendJson(response, error.status, { error: { code: error.code, message: error.message } });
           console.error(error);
           return sendJson(response, 500, { error: { code: 'INTERNAL_ERROR', message: 'Design Harness API failed.' } });
         }

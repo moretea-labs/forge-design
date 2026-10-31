@@ -7,6 +7,7 @@ import {
   Clipboard,
   Component,
   FileCode2,
+  Download,
   Focus,
   GitBranch,
   Grid2X2,
@@ -18,7 +19,7 @@ import {
   Smartphone,
   SwatchBook,
 } from 'lucide-react';
-import { designApi, visualAssetContentUrl } from './client/design-api';
+import { designApi, visualAssetContentUrl, type DesignSourceModule } from './client/design-api';
 import { lintScreen } from './core/lint';
 import type {
   ComponentContract,
@@ -37,7 +38,7 @@ import { installTokenVariables } from './design-system/tokens';
 import { ProductWorkspace } from './components/ProductWorkspace';
 import { ReviewCanvas, type ReviewCanvasLane, type ReviewCanvasMode } from './components/ReviewCanvas';
 
-type WorkspaceView = 'product' | 'screens' | 'components' | 'tokens';
+type WorkspaceView = 'product' | 'screens' | 'components' | 'tokens' | 'modules';
 type InspectorTab = 'inspect' | 'spec' | 'flow';
 type Notice = { kind: 'success' | 'error'; message: string } | null;
 
@@ -133,6 +134,8 @@ function AssetEditor({ value, onChange, onSave, onReload, busy }: {
 
 export default function App(): ReactElement {
   const [projects, setProjects] = useState<DesignProjectSummary[]>([]);
+  const [sourceModules, setSourceModules] = useState<DesignSourceModule[]>([]);
+  const [selectedModuleId, setSelectedModuleId] = useState('');
   const [projectId, setProjectId] = useState('');
   const [context, setContext] = useState<DesignProjectContext | null>(null);
   const [paths, setPaths] = useState<DesignProjectPaths | null>(null);
@@ -152,6 +155,7 @@ export default function App(): ReactElement {
   const [notice, setNotice] = useState<Notice>(null);
 
   const selected = context?.screens.find((screen) => screen.id === selectedId) ?? context?.screens[0] ?? null;
+  const selectedModule = sourceModules.find((module) => module.id === selectedModuleId) ?? sourceModules[0] ?? null;
   const selectedStateIds = selected ? screenStateIds(selected) : [];
   const resolvedSelected = selected ? resolveScreenState(selected, activeStateId) : null;
   const contracts = context?.components.components ?? [];
@@ -204,11 +208,14 @@ export default function App(): ReactElement {
     setBusy(true);
     setNotice(null);
     try {
-      const [nextContext, nextPaths, nextReviewStatus] = await Promise.all([
+      const [nextContext, nextPaths, nextReviewStatus, nextModules] = await Promise.all([
         designApi.getContext(nextProjectId),
         designApi.getPaths(nextProjectId),
         designApi.getReviewStatus(nextProjectId),
+        designApi.listModules(nextProjectId),
       ]);
+      setSourceModules(nextModules);
+      setSelectedModuleId((current) => nextModules.some((module) => module.id === current) ? current : nextModules[0]?.id ?? '');
       setContext(nextContext);
       setPaths(nextPaths);
       setReviewStatus(nextReviewStatus);
@@ -316,6 +323,30 @@ export default function App(): ReactElement {
       setNotice({ kind: 'success', message: `已创建 screens/${screen.id}.json。` });
     } catch (error) {
       setNotice({ kind: 'error', message: error instanceof Error ? error.message : '创建画板失败。' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const downloadModule = async () => {
+    if (!selectedModule) return;
+    setBusy(true);
+    try {
+      const blob = await designApi.exportModule(projectId, selectedModule.id);
+      const url = URL.createObjectURL(blob);
+      try {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = selectedModule.id + '-design.md';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+      setNotice({ kind: 'success', message: '已导出 ' + selectedModule.name + ' 的源码和产品约束；不会改变项目设计。' });
+    } catch (error) {
+      setNotice({ kind: 'error', message: error instanceof Error ? error.message : '模块导出失败。' });
     } finally {
       setBusy(false);
     }
@@ -466,16 +497,18 @@ export default function App(): ReactElement {
           <button className={view === 'screens' ? 'active' : ''} onClick={() => switchView('screens')}><Grid2X2 size={17} />Screens</button>
           <button className={view === 'components' ? 'active' : ''} onClick={() => switchView('components')}><Component size={17} />Components</button>
           <button className={view === 'tokens' ? 'active' : ''} onClick={() => switchView('tokens')}><SwatchBook size={17} />Tokens</button>
+          {sourceModules.length > 0 && <button className={view === 'modules' ? 'active' : ''} onClick={() => switchView('modules')}><FileCode2 size={17} />Design Modules</button>}
         </nav>
-        {view === 'product' ? renderProductSidebar() : view === 'screens' ? renderScreensSidebar() : view === 'components' ? renderComponentsSidebar() : renderTokensSidebar()}
+        {view === 'product' ? renderProductSidebar() : view === 'screens' ? renderScreensSidebar() : view === 'components' ? renderComponentsSidebar() : view === 'modules' ? <div className="screen-list">{sourceModules.map((module) => <button key={module.id} className={module.id === selectedModule?.id ? 'selected' : ''} onClick={() => setSelectedModuleId(module.id)}><FileCode2 size={16} /><span><strong>{module.name}</strong><small>{module.files.length} files · {module.id}</small></span></button>)}</div> : renderTokensSidebar()}
         <div className="system-status"><span className="status-dot" /><div><strong>Repository linked</strong><small>{context.tokens.meta.name} · v{context.tokens.meta.version}</small></div></div>
       </aside>
 
       <section className="workspace">
         <header className="toolbar">
-          <div className="toolbar-title"><span className="crumb">{context.project.name} /</span><strong>{view === 'product' ? 'Product Contract' : view === 'screens' ? selected?.name : view === 'components' ? 'Components' : 'Tokens'}</strong></div>
+          <div className="toolbar-title"><span className="crumb">{context.project.name} /</span><strong>{view === 'product' ? 'Product Contract' : view === 'screens' ? selected?.name : view === 'components' ? 'Components' : view === 'modules' ? selectedModule?.name : 'Tokens'}</strong></div>
           <div className="toolbar-controls">
             <button onClick={() => void copyContext()}><Clipboard size={15} />ChatGPT Context</button>
+            {view === 'modules' && selectedModule && <button onClick={() => void downloadModule()} disabled={busy}><Download size={15} />导出当前模块源码</button>}
             <button onClick={() => void loadProjects()} disabled={busy}><RefreshCw className={busy ? 'spin' : ''} size={15} />刷新</button>
             {view === 'screens' && reviewProfile && <label className="device-select"><Smartphone size={15} /><select aria-label="Review Profile" value={reviewProfile.id} onChange={(event) => setReviewProfileId(event.target.value)}>{reviewProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select><ChevronDown size={13} /></label>}
             {view === 'screens' && selected && selectedStateIds.length > 1 && <label className="device-select"><Layers3 size={15} /><select aria-label="页面状态" value={activeStateId} onChange={(event) => setActiveStateId(event.target.value)}>{selected.states?.map((state) => <option key={state.id} value={state.id}>{state.name}</option>)}</select><ChevronDown size={13} /></label>}
@@ -497,6 +530,16 @@ export default function App(): ReactElement {
             onReload={() => setEditorText(json(context.product ?? productScaffold(context)))}
             busy={busy}
           />
+        ) : view === 'modules' && selectedModule ? (
+          <div className="module-preview-workspace">
+            <header><h2>{selectedModule.name}</h2><p>{selectedModule.description}</p></header>
+            {selectedModule.preview ? (
+              <div className="module-preview-device">
+                <iframe title={selectedModule.name + ' · isolated prototype preview'} sandbox="allow-scripts" loading="lazy" referrerPolicy="no-referrer" src={designApi.modulePreviewUrl(projectId, selectedModule)} />
+              </div>
+            ) : <p>此模块尚未绑定可预览的构建产物。源码导出仍可使用；正式 Screen/Golden 以项目设计合同为准。</p>}
+            <p className="module-preview-caption">项目原型仅用于设计审查，非 Golden、非生产 UI。预览使用隔离 iframe，不会将业务 React 状态写入 Design Authority。</p>
+          </div>
         ) : view === 'screens' && selected ? (
           <ReviewCanvas
             key={`${selected.id}-${activeStateId}-${reviewProfile?.id ?? 'default'}-${reviewLane}`}
@@ -526,6 +569,12 @@ export default function App(): ReactElement {
             <section className="inspector-section"><div className="inspector-title"><CheckCircle2 size={16} /><strong>Design Freeze</strong><span>{reviewStatus?.units.filter((unit) => unit.acceptanceCurrent).length ?? 0}/{reviewStatus?.units.length ?? 0}</span></div>{reviewStatus?.freezeCurrent ? <div className="lint-success"><CheckCircle2 size={17} />Current freeze · Phase D handoff allowed</div> : <div className="lint-list">{reviewStatus?.units.map((unit) => <div key={unit.unitId}>{unit.acceptanceCurrent ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}<span><strong>{unit.unitId}</strong><small>{unit.reviewStatus} · {unit.acceptance ? (unit.acceptanceCurrent ? 'accepted current' : 'acceptance stale') : 'not accepted'}</small></span></div>)}{reviewStatus?.freeze && !reviewStatus.freezeCurrent ? <div><CircleAlert size={16} /><span>Project freeze is stale after design changes.</span></div> : null}{!reviewStatus?.freeze ? <div><CircleAlert size={16} /><span>Project has not been frozen for implementation.</span></div> : null}</div>}</section>
             <section className="inspector-section"><div className="inspector-title"><FileCode2 size={16} /><strong>Review semantics</strong></div><p>Captured 只说明已有图片 artifact；必须实际进入模型视觉上下文才能标记 Model Visible，完成像素级审查后才能标记 Visual Reviewed。</p></section>
             {paths && <section className="inspector-section storage-panel"><div className="inspector-title"><GitBranch size={16} /><strong>事实源</strong><Check size={14} /></div><code>{paths.product}</code></section>}
+          </>
+        ) : view === 'modules' && selectedModule ? (
+          <>
+            <div className="inspector-tabs single-tab"><button className="active">Module handoff</button></div>
+            <section className="inspector-section"><div className="inspector-title"><FileCode2 size={16} /><strong>源码范围</strong></div><p>只导出本模块显式登记的文件，无需复制整个 App 或运行旧 Studio。</p><ul>{selectedModule.files.map((file) => <li key={file}><code>{file}</code></li>)}</ul></section>
+            <section className="inspector-section"><button className="inspector-action" onClick={() => void downloadModule()} disabled={busy}><Download size={14} />导出 Markdown 交给 Gemini</button></section>
           </>
         ) : view === 'screens' ? (
           <>

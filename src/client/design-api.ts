@@ -1,6 +1,7 @@
 import type { ComponentContractsDocument, DesignProjectContext, DesignProjectPaths, DesignProjectSummary, DesignReviewStatus, DesignTokens, ProductDesignModel, ScreenSpec } from '../core/schema';
 
 type ApiErrorPayload = { error?: { code?: string; message?: string } };
+export type DesignSourceModule = { id: string; name: string; description: string; files: string[]; preview?: { entry: string; screenId: string } };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -23,6 +24,16 @@ export const designApi = {
     return payload.projects;
   },
   getContext: (projectId: string) => request<DesignProjectContext>(projectPath(projectId, '/context')),
+  listModules: async (projectId: string): Promise<DesignSourceModule[]> => (await request<{ modules: DesignSourceModule[] }>(projectPath(projectId, '/modules'))).modules,
+  async exportModule(projectId: string, moduleId: string): Promise<Blob> {
+    const response = await fetch(projectPath(projectId, '/modules/' + encodeURIComponent(moduleId) + '/export.md'));
+    if (!response.ok) {
+      const payload = await response.json() as ApiErrorPayload;
+      throw new Error(payload.error?.message ?? 'Design module export failed.');
+    }
+    return response.blob();
+  },
+  modulePreviewUrl: (projectId: string, module: DesignSourceModule) => projectPath(projectId, '/modules/' + encodeURIComponent(module.id) + '/preview/' + encodeURIComponent(module.preview?.entry.split('/').at(-1) ?? 'prototype.html')) + '?screen=' + encodeURIComponent(module.preview?.screenId ?? ''),
   getPaths: (projectId: string) => request<DesignProjectPaths>(projectPath(projectId, '/paths')),
   getReviewStatus: (projectId: string) => request<DesignReviewStatus>(projectPath(projectId, '/review-status')),
   validate: (projectId: string) => request<{ ok: boolean; projectId: string; errors: string[]; warnings: string[]; goldenGate: DesignProjectContext['goldenGate'] }>(projectPath(projectId, '/validate')),
