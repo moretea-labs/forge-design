@@ -220,6 +220,9 @@ export default function App(): ReactElement {
       setPaths(nextPaths);
       setReviewStatus(nextReviewStatus);
       setProjectId(nextProjectId);
+      const pageUrl = new URL(window.location.href);
+      pageUrl.searchParams.set('project', nextProjectId);
+      window.history.replaceState(null, '', pageUrl);
       installTokenVariables(nextContext.tokens);
       const nextScreenId = preferredScreenId && nextContext.screens.some((screen) => screen.id === preferredScreenId)
         ? preferredScreenId
@@ -233,8 +236,10 @@ export default function App(): ReactElement {
       setReviewProfileId((current) => (nextContext.designUnits.reviewProfiles ?? []).some((profile) => profile.id === current)
         ? current
         : nextContext.designUnits.reviewProfiles?.[0]?.id ?? '');
+      return true;
     } catch (error) {
       setNotice({ kind: 'error', message: error instanceof Error ? error.message : '无法读取设计项目。' });
+      return false;
     } finally {
       setBusy(false);
     }
@@ -258,7 +263,13 @@ export default function App(): ReactElement {
       try {
         const nextProjects = await designApi.listProjects();
         setProjects(nextProjects);
-        if (nextProjects[0]) await loadProject(nextProjects[0].id);
+        const requestedId = new URLSearchParams(window.location.search).get('project');
+        const candidates = requestedId && nextProjects.some((item) => item.id === requestedId)
+          ? [...nextProjects.filter((item) => item.id === requestedId), ...nextProjects.filter((item) => item.id !== requestedId)]
+          : nextProjects;
+        for (const candidate of candidates) {
+          if (await loadProject(candidate.id)) break;
+        }
       } catch (error) {
         setNotice({ kind: 'error', message: error instanceof Error ? error.message : '无法启动 Design Harness。' });
       }
