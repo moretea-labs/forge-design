@@ -325,19 +325,73 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .preview-image-placeholder, .preview-shape, .preview-path { display: block; min-height: 24px; min-width: 24px; }
 
 
-/* Source previews are bounded, untrusted review artifacts inside the common Studio. */
-.module-preview-workspace {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 18px;
-  padding: 28px 20px 48px;
-  overflow: auto;
-  height: 100%;
-}
-.module-preview-workspace header { align-self: stretch; max-width: 720px; }
-.module-preview-workspace h2 { margin: 0 0 6px; }
-.module-preview-workspace p { color: var(--color-text-secondary); font-size: 13px; line-height: 1.6; }
-.module-preview-device { width: 405px; max-width: 100%; padding: 6px; background: var(--color-surface); border: 1px solid var(--color-text-secondary);  border-radius: 28px; }
-.module-preview-device iframe { display: block; width: 393px; max-width: 100%; height: 852px; border: 0; border-radius: 22px; background: var(--color-screen-background); }
-.module-preview-caption { max-width: 650px; }
+/* Unified Design Studio: the source catalog owns page IDs; Studio owns navigation and review. */
+body { min-width: 980px; }
+.app-shell { grid-template-columns: 260px minmax(440px, 1fr) 292px; }
+.left-sidebar { padding: 16px 12px; }
+.brand { padding: 10px 12px 20px; }
+.project-picker { margin: 0 4px 18px; }
+.side-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 0 4px 16px; }
+.side-nav button { min-width: 0; min-height: 38px; padding: 0 10px; font-size: 11px; }
+.side-nav button.active { background: var(--color-panel); box-shadow: inset 3px 0 0 var(--color-accent); }
+.module-navigator { display: flex; flex: 1; min-height: 0; flex-direction: column; overflow: hidden; }
+.module-family-list { display: grid; gap: 3px; padding: 0 4px 10px; }
+.module-family-list button { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 37px; padding: 0 10px; border: 1px solid transparent; border-radius: 8px; color: var(--color-chrome-text); background: transparent; text-align: left; font-size: 12px; cursor: pointer; }
+.module-family-list button span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.module-family-list button small { min-width: 26px; padding: 3px 5px; border-radius: 6px; color: var(--color-chrome-text-muted); background: var(--color-panel); text-align: center; font-size: 10px; font-variant-numeric: tabular-nums; }
+.module-family-list button:hover, .module-family-list button.selected { color: var(--color-text-inverse); background: var(--color-panel); }
+.module-family-list button.selected { border-color: var(--color-border); }
+.module-page-browser { display: flex; min-height: 0; flex: 1; flex-direction: column; border-top: 1px solid var(--color-border); }
+.module-page-browser .sidebar-section-title { padding: 18px 14px 10px; }
+.module-search { display: flex; align-items: center; gap: 8px; height: 38px; margin: 0 4px 10px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-chrome-text-muted); background: var(--color-panel); }
+.module-search:focus-within { border-color: var(--color-accent); }
+.module-search input { width: 100%; min-width: 0; padding: 0; outline: none; border: 0; color: var(--color-chrome-text); background: transparent; font-size: 12px; }
+.module-search input::placeholder { color: var(--color-chrome-text-faint); }
+.module-screen-list { display: grid; align-content: start; gap: 3px; min-height: 0; overflow: auto; padding: 0 4px 12px; scrollbar-width: thin; }
+.module-screen-list button { display: grid; gap: 4px; min-height: 51px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; text-align: left; cursor: pointer; }
+.module-screen-list button strong { overflow: hidden; color: var(--color-chrome-text); font-size: 12px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
+.module-screen-list button small { overflow: hidden; color: var(--color-chrome-text-faint); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.module-screen-list button:hover, .module-screen-list button.selected { background: var(--color-panel); }
+.module-screen-list button.selected { border-color: var(--color-border); box-shadow: inset 3px 0 0 var(--color-accent); }
+.module-screen-list button.selected strong { color: var(--color-text-inverse); }
+.module-screen-list p { padding: 0 10px; color: var(--color-chrome-text-muted); font-size: 12px; }
+.toolbar-module-count { margin-left: 14px; color: var(--color-chrome-text-muted); font-size: 11px; font-weight: 400; }
+.module-preview-workspace { position: absolute; inset: 58px 0 0; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.module-preview-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 22px 32px 19px; border-bottom: 1px solid var(--color-border); background: var(--color-canvas-raised); }
+.module-preview-header h1 { margin: 5px 0 8px; color: var(--color-text-inverse); font-size: clamp(18px, 1.75vw, 25px); font-weight: 660; letter-spacing: -.035em; line-height: 1.2; }
+.module-preview-header p { max-width: 660px; margin: 0; color: var(--color-chrome-text-muted); font-size: 11px; line-height: 1.6; }
+.module-preview-eyebrow { color: var(--color-chrome-text-subtle); font-size: 10px; font-weight: 650; letter-spacing: .12em; }
+.module-review-tag { flex: 0 0 auto; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 20px; color: var(--color-chrome-text-muted); font-size: 10px; }
+.module-preview-toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 28px; border-bottom: 1px solid var(--color-border); background: var(--color-canvas-raised); }
+.module-preview-breadcrumb { display: flex; align-items: center; gap: 9px; min-width: 0; color: var(--color-chrome-text-muted); font-size: 11px; }
+.module-preview-breadcrumb strong { overflow: hidden; color: var(--color-chrome-text); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.module-preview-pagination { display: flex; align-items: center; gap: 6px; color: var(--color-chrome-text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.module-preview-pagination button { width: 30px; height: 30px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-panel); font-size: 19px; cursor: pointer; }
+.module-preview-pagination button:disabled { opacity: .35; cursor: default; }
+.module-preview-stage { display: flex; justify-content: center; flex: 1; min-height: 0; overflow: auto; padding: 26px 20px 36px; }
+.module-preview-device { flex: 0 0 auto; width: 411px; height: 870px; overflow: hidden; border: 9px solid var(--color-device-frame); border-radius: 47px; background: var(--color-screen-background); box-shadow: var(--shadow-device); }
+.module-preview-device iframe { display: block; width: 393px; height: 852px; margin: 0; border: 0; background: var(--color-screen-background); }
+.module-preview-caption { margin: 0; padding: 11px 24px; border-top: 1px solid var(--color-border); color: var(--color-chrome-text-muted); background: var(--color-canvas-raised); font-size: 10px; line-height: 16px; }
+.module-review-guidance { margin-top: 12px !important; }
+.inspector-section code { overflow-wrap: anywhere; color: var(--color-chrome-text-muted); font-size: 10px; }
+.side-nav button:focus-visible, .module-family-list button:focus-visible, .module-screen-list button:focus-visible, .module-preview-pagination button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+@media (max-width: 1320px) { .app-shell { grid-template-columns: 234px minmax(440px, 1fr) 250px; } .module-preview-header { padding: 17px 22px; } .toolbar-controls { gap: 6px; } }
+
+/* Fit the entire phone within a desktop review viewport; 100% is an explicit inspection choice. */
+.module-preview-scale-slot { flex: 0 0 auto; position: relative; }
+.module-preview-device { position: relative; }
+.module-preview-stage { align-items: flex-start; }
+.module-preview-pagination button { width: auto; min-width: 32px; padding: 0 8px; font-size: 11px; }
+.module-preview-pagination button[aria-pressed="true"] { color: var(--color-text-inverse); border-color: var(--color-accent); }
+.module-preview-pagination span { margin: 0 8px; }
+.module-source-files summary { min-height: 36px; display: flex; align-items: center; cursor: pointer; color: var(--color-chrome-text); font-size: 11px; }
+.module-source-files[open] ul { padding-top: 8px; }
+
+/* Review canvas must not grow the application grid row to the 363-page catalog's intrinsic height. */
+.app-shell { grid-template-rows: minmax(0, 1fr); }
+.left-sidebar { min-height: 0; overflow: hidden; }
+.module-preview-workspace { align-items: stretch; gap: 0; padding: 0; height: auto; overflow: hidden; }
+.module-preview-workspace header { align-self: stretch; max-width: none; }
+.module-preview-device { width: 411px; max-width: none; padding: 0; }
+.module-preview-device iframe { width: 393px; max-width: none; border-radius: 38px; }
+.module-preview-caption { max-width: none; }

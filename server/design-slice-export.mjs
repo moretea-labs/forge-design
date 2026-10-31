@@ -47,7 +47,28 @@ function validateModule(module) {
   return { id: module.id, name: module.name, files, description: typeof module.description === 'string' ? module.description : '', ...(previewEntry ? { preview: { entry: previewEntry, screenId: preview.screenId } } : {}) };
 }
 
-export async function listDesignModules(project) {
+// The project's existing static SCREENS registration is the sole source of page IDs.
+// Parse literal registration lines; never import or execute project TSX in the Studio server.
+export function readStaticScreenRegistry(source) {
+  const start = source.indexOf('const SCREENS = [');
+  const closing = start < 0 ? null : source.slice(start).match(/\n\]\s*(?:as const)?\s*;/);
+  const end = closing ? start + closing.index : -1;
+  if (end < 0) throw new ModuleExportError('Static SCREENS catalog is unavailable.');
+  const screens = [];
+  for (const line of source.slice(start, end).split('\n')) {
+    const id = line.match(/^\s*\{\s*id:\s*'([a-z0-9_-]+)'/);
+    if (!id) continue;
+    const collection = line.match(/,\s*collection:\s*(?:'([^']+)'|([A-Za-z_][A-Za-z_0-9]*))/);
+    const name = line.match(/,\s*name:\s*'([^']+)'/);
+    const badge = line.match(/,\s*badge:\s*'([^']+)'/);
+    const kind = line.match(/,\s*kind:\s*'([^']+)'/);
+    if (collection && name) screens.push({ id: id[1], name: name[1], collection: collection[1] ?? collection[2], badge: badge?.[1] ?? '', kind: kind?.[1] ?? 'candidate' });
+  }
+  if (!screens.length || screens.length > 2000 || new Set(screens.map(screen => screen.id)).size !== screens.length) throw new ModuleExportError('Invalid or empty static screen registry.');
+  return screens;
+}
+
+export async function listDesignModules(project, { includeScreens = true } = {}) {
   const manifest = join(project.storagePath, 'modules.json');
   let document;
   try {
@@ -60,10 +81,23 @@ export async function listDesignModules(project) {
     throw new ModuleExportError('Invalid project-owned modules.json catalog.');
   }
   const modules = document.modules.map(validateModule);
-  if (new Set(modules.map(module => module.id)).size !== modules.length) {
-    throw new ModuleExportError('Duplicate module id.');
+  if (new Set(modules.map(module => module.id)).size !== modules.length) throw new ModuleExportError('Duplicate module id.');
+  if (!includeScreens) return modules;
+  const preview = modules.find(module => module.preview)?.preview;
+  const catalogPath = document.screenCatalog ?? (preview ? join(dirname(dirname(preview.entry)), 'src/main.tsx') : null);
+  let registry = [];
+  if (catalogPath) {
+    try {
+      registry = readStaticScreenRegistry(await readBoundedProjectFile(project, safeFilePath(catalogPath, new Set(['.tsx', '.ts']))));
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
   }
-  return modules;
+  return modules.map(module => {
+    const sourceScreen = registry.find(screen => screen.id === module.preview?.screenId);
+    const screens = sourceScreen ? registry.filter(screen => screen.collection === sourceScreen.collection) : [];
+    return { ...module, screens: screens.length ? screens : module.preview ? [{ id: module.preview.screenId, name: module.name, badge: 'Preview', kind: 'candidate' }] : [] };
+  });
 }
 
 async function readBoundedProjectFile(project, path) {
@@ -85,7 +119,7 @@ function fence(content) {
 }
 
 export async function readDesignModulePreview(project, moduleId, assetPath) {
-  const module = (await listDesignModules(project)).find(item => item.id === moduleId);
+  const module = (await listDesignModules(project, { includeScreens: false })).find(item => item.id === moduleId);
   if (!module?.preview) throw new ModuleExportError('Module has no registered preview.', 404, 'MODULE_PREVIEW_NOT_FOUND');
   const asset = safeFilePath(assetPath, new Set(Object.keys(PREVIEW_TYPES)));
   if (asset !== module.preview.entry.split('/').at(-1) && !asset.startsWith('assets/')) {
@@ -107,7 +141,7 @@ export async function readDesignModulePreview(project, moduleId, assetPath) {
 
 export async function exportDesignModule(project, moduleId) {
   if (!ID_PATTERN.test(moduleId ?? '')) throw new ModuleExportError('Invalid module id.');
-  const module = (await listDesignModules(project)).find(item => item.id === moduleId);
+  const module = (await listDesignModules(project, { includeScreens: false })).find(item => item.id === moduleId);
   if (!module) throw new ModuleExportError('Design module not found.', 404, 'MODULE_NOT_FOUND');
   let size = 0;
   const sections = [];

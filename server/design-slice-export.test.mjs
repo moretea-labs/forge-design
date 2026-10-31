@@ -65,3 +65,24 @@ describe('project-owned design module handoff', () => {
     await expect(readDesignModulePreview(project, 'followup', 'other.html')).rejects.toThrow(/Only the declared/);
   });
 });
+
+describe('single-source Studio page registration', () => {
+  it('derives all states in the same family from the source SCREENS catalog without duplicating ids', async () => {
+    const project = await fixture();
+    await mkdir(join(project.root, 'design', 'dist'), { recursive: true });
+    await mkdir(join(project.root, 'design', 'src'), { recursive: true });
+    await writeFile(join(project.root, 'design/src/main.tsx'), [
+      'const SCREENS = [',
+      " { id: 'd4-followup-workspace', collection: 'v2-followup', kind: 'candidate', name: 'Follow-up · Home', badge: 'Review' },",
+      " { id: 'd4-followup-error', collection: 'v2-followup', kind: 'candidate', name: 'Follow-up · Error', badge: 'State' },",
+      " { id: 'd5-data-home', collection: 'v2-data', kind: 'candidate', name: 'Data · Home', badge: 'Review' },",
+      '] as const;',
+    ].join('\n'));
+    await writeFile(join(project.root, 'design/dist/prototype.html'), '<main></main>');
+    await writeFile(join(project.root, 'sample.tsx'), 'export const screen = true');
+    await catalog(project, [{ id: 'followup', name: 'Follow-up', files: ['sample.tsx'], preview: { entry: 'design/dist/prototype.html', screenId: 'd4-followup-workspace' } }]);
+    const [module] = await listDesignModules(project);
+    expect(module.screens.map(screen => screen.id)).toEqual(['d4-followup-workspace', 'd4-followup-error']);
+    expect((await listDesignModules(project, { includeScreens: false }))[0].screens).toBeUndefined();
+  });
+});
